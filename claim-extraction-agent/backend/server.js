@@ -9,7 +9,6 @@ const https          = require('https');
 const url            = require('url');
 const fs             = require('fs');
 const path           = require('path');
-const { spawn }      = require('child_process');
 
 // ── Load .env if present ───────────────────────────────────────────────────────
 const envPath = path.join(__dirname, '.env');
@@ -85,24 +84,29 @@ function httpsPost(targetUrl, headers, body) {
   });
 }
 
-function httpsGet(targetUrl) {
+function httpsGet(targetUrl, redirectsLeft = 5) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(targetUrl);
+    const client = parsed.protocol === 'http:' ? http : https;
     const options = {
       hostname: parsed.hostname,
-      port: parsed.port || 443,
+      port: parsed.port || (parsed.protocol === 'http:' ? 80 : 443),
       path: parsed.pathname + (parsed.search || ''),
       method: 'GET',
       headers: { 'User-Agent': 'ClaimExtractionAgent/1.0' },
     };
-    const req = https.request(options, res => {
+    const req = client.request(options, res => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return httpsGet(res.headers.location).then(resolve).catch(reject);
+        res.resume(); // drain
+        if (redirectsLeft <= 0) return reject(new Error('Too many redirects'));
+        const nextUrl = new URL(res.headers.location, targetUrl).toString();
+        return httpsGet(nextUrl, redirectsLeft - 1).then(resolve).catch(reject);
       }
       let data = '';
       res.on('data', c => (data += c));
       res.on('end', () => resolve(data));
     });
+    req.setTimeout(15000, () => req.destroy(new Error('Request timed out')));
     req.on('error', reject);
     req.end();
   });
@@ -121,57 +125,6 @@ function stripHtml(html) {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 8000);
-}
-
-// Detect the corporate proxy from env or macOS system settings
-function detectProxy() {
-  // 1. Environment variables (set at server startup)
-  const envProxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY ||
-                   process.env.https_proxy || process.env.http_proxy;
-  if (envProxy) return envProxy;
-
-  // 2. macOS scutil --proxy (synchronous, fast)
-  try {
-    const { execSync } = require('child_process');
-    const out = execSync('scutil --proxy', { encoding: 'utf8', timeout: 3000 });
-    const host = out.match(/HTTPSProxy\s*:\s*(\S+)/)?.[1];
-    const port = out.match(/HTTPSPort\s*:\s*(\S+)/)?.[1];
-    if (host && port) return `http://${host}:${port}`;
-    const host2 = out.match(/HTTPProxy\s*:\s*(\S+)/)?.[1];
-    const port2 = out.match(/HTTPPort\s*:\s*(\S+)/)?.[1];
-    if (host2 && port2) return `http://${host2}:${port2}`;
-  } catch (_) {}
-
-  // 3. Walmart corporate proxy fallback (covers PAC-only scutil configs)
-  return 'http://proxy-intlho.wal-mart.com:8080';
-}
-
-// Use curl via shell, auto-injecting the corporate proxy if detected
-function fetchWithCurl(targetUrl) {
-  return new Promise((resolve, reject) => {
-    const safeUrl = targetUrl.replace(/'/g, "'\\''");
-    const proxy = detectProxy();
-    const proxyFlag = proxy ? `-x '${proxy}'` : '';
-    const cmd = `/usr/bin/curl -sL --max-time 15 -A 'ClaimBot/1.0' ${proxyFlag} '${safeUrl}'`;
-
-    console.log(`[fetch] proxy=${proxy || 'none'} url=${targetUrl}`);
-
-    const child = spawn('/bin/sh', ['-c', cmd]);
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.on('data', d => (stdout += d));
-    child.stderr.on('data', d => (stderr += d));
-
-    child.on('close', code => {
-      if (code !== 0) {
-        return reject(new Error(`curl exited ${code}: ${stderr.slice(0, 200)}`));
-      }
-      resolve(stdout);
-    });
-
-    child.on('error', err => reject(err));
-  });
 }
 
 // ── LLM call (Gemini) ──────────────────────────────────────────────────────────
@@ -270,12 +223,12 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
-  // Fetch URL proxy (uses curl so system proxy/VPN is respected)
+  // Fetch URL (pure Node https/http — no shell, no curl, no proxy)
   if (req.method === 'POST' && pathname === '/fetch-url') {
     try {
       const body = await readBody(req);
       if (!body.url) return sendJSON(res, 400, { detail: "Provide 'url'." });
-      const html = await fetchWithCurl(body.url);
+      const html = await httpsGet(body.url);
       const text = stripHtml(html);
       if (!text) return sendJSON(res, 502, { detail: 'Page returned empty content.' });
       return sendJSON(res, 200, { text, char_count: text.length });
