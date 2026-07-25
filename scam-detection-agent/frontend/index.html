@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent 5 — Scam Detection Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --accent:      #ef4444;
+      --accent-dark: #dc2626;
+    }
+
+    @keyframes fadeUp    { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes spin      { to { transform:rotate(360deg); } }
+    @keyframes pulse-dot { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+    @keyframes scanline  { 0%{transform:translateY(-100%);} 100%{transform:translateY(100vh);} }
+    @keyframes barFill   { from{width:0} to{width:var(--w)} }
+
+    .fade-up  { animation: fadeUp 0.35s ease both; }
+    .spinner  { animation: spin 0.8s linear infinite; }
+    .dot-pulse{ animation: pulse-dot 1.2s ease-in-out infinite; }
+
+    textarea:focus, input:focus { outline: none; }
+    ::-webkit-scrollbar       { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+
+    /* Radar chart */
+    #radar-canvas { display:block; margin:0 auto; }
+
+    /* Bar fill animation */
+    .bar-fill { animation: barFill 0.8s cubic-bezier(0.4,0,0.2,1) both; }
+
+    /* Trigger phrase highlight */
+    .trigger-urgency        { background: rgba(239,68,68,0.15);   border-color: rgba(239,68,68,0.4); }
+    .trigger-manipulation   { background: rgba(168,85,247,0.15);  border-color: rgba(168,85,247,0.4); }
+    .trigger-financial      { background: rgba(234,179,8,0.15);   border-color: rgba(234,179,8,0.4); }
+    .trigger-emotional      { background: rgba(249,115,22,0.15);  border-color: rgba(249,115,22,0.4); }
+
+    /* Risk tier badge */
+    .tier-CRITICAL { background:rgba(239,68,68,0.2);   color:#fca5a5; border-color:rgba(239,68,68,0.5); }
+    .tier-HIGH     { background:rgba(249,115,22,0.2);  color:#fdba74; border-color:rgba(249,115,22,0.5); }
+    .tier-MEDIUM   { background:rgba(234,179,8,0.2);   color:#fde047; border-color:rgba(234,179,8,0.5); }
+    .tier-LOW      { background:rgba(59,130,246,0.2);  color:#93c5fd; border-color:rgba(59,130,246,0.5); }
+    .tier-SAFE     { background:rgba(16,185,129,0.2);  color:#6ee7b7; border-color:rgba(16,185,129,0.5); }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans antialiased">
+
+  <!-- ── Header ─────────────────────────────────────────────────────────────── -->
+  <header class="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-20">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-red-700 flex items-center justify-center text-white font-bold text-sm">A5</div>
+      <div>
+        <span class="font-semibold text-white">Scam Detection Agent</span>
+        <span class="ml-2 text-xs text-gray-500 font-mono">Agent 5 · Data Deception Pipeline</span>
+      </div>
+      <div class="ml-2 flex items-center gap-1.5 px-2 py-1 bg-red-950/50 border border-red-800/50 rounded-md">
+        <span class="text-xs text-red-400 font-mono">Transformer</span>
+        <span class="text-xs text-gray-500">Behavioral Embeddings</span>
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <span id="status-dot" class="w-2 h-2 rounded-full bg-gray-600"></span>
+        <span id="status-text" class="text-xs text-gray-500">checking…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main ───────────────────────────────────────────────────────────────── -->
+  <main class="max-w-6xl mx-auto px-6 py-10 space-y-8">
+
+    <!-- Hero -->
+    <div class="fade-up">
+      <h1 class="text-3xl font-bold text-white">Detect scams through behavioral embeddings</h1>
+      <p class="mt-2 text-gray-400 max-w-2xl">
+        Paste any suspicious message, email, or text. The fine-tuned Transformer scores four
+        <span class="text-red-400">persuasion strategy dimensions</span> —
+        Urgency, Psychological Manipulation, Financial Lure, and Emotional Exploitation —
+        forming a <strong class="text-white">scam-behavior vector</strong> instead of relying on keywords.
+      </p>
+    </div>
+
+    <!-- Dimension legend -->
+    <div class="fade-up grid grid-cols-2 sm:grid-cols-4 gap-3" style="animation-delay:0.03s">
+      <div class="bg-gray-900 border border-red-900/40 rounded-xl p-3 space-y-1">
+        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span><span class="text-xs font-semibold text-red-300">Urgency</span></div>
+        <p class="text-xs text-gray-500">"Limited time offer", "Act now", "Expires today"</p>
+      </div>
+      <div class="bg-gray-900 border border-purple-900/40 rounded-xl p-3 space-y-1">
+        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span><span class="text-xs font-semibold text-purple-300">Manipulation</span></div>
+        <p class="text-xs text-gray-500">"Specially selected", "Bank account suspended"</p>
+      </div>
+      <div class="bg-gray-900 border border-yellow-900/40 rounded-xl p-3 space-y-1">
+        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-yellow-500"></span><span class="text-xs font-semibold text-yellow-300">Financial Lure</span></div>
+        <p class="text-xs text-gray-500">"Claim reward", "You've won", "Double your money"</p>
+      </div>
+      <div class="bg-gray-900 border border-orange-900/40 rounded-xl p-3 space-y-1">
+        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-orange-500"></span><span class="text-xs font-semibold text-orange-300">Emotional</span></div>
+        <p class="text-xs text-gray-500">"I need urgent help", "Dying relative", "Please trust me"</p>
+      </div>
+    </div>
+
+    <!-- Input card -->
+    <div class="fade-up bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4" style="animation-delay:0.06s">
+
+      <!-- Examples -->
+      <div class="flex flex-wrap gap-2 items-center">
+        <span class="text-xs text-gray-600">Try an example:</span>
+        <button onclick="loadExample('lottery')"  class="example-btn px-3 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs text-gray-300 transition">🎰 Lottery scam</button>
+        <button onclick="loadExample('bank')"     class="example-btn px-3 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs text-gray-300 transition">🏦 Bank phishing</button>
+        <button onclick="loadExample('advance')"  class="example-btn px-3 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs text-gray-300 transition">💸 Advance fee</button>
+        <button onclick="loadExample('romance')"  class="example-btn px-3 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs text-gray-300 transition">💌 Romance scam</button>
+        <button onclick="loadExample('legit')"    class="example-btn px-3 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs text-gray-300 transition">✅ Legit message</button>
+      </div>
+
+      <textarea id="input-text" rows="7"
+        placeholder="Paste a suspicious email, text message, pop-up, or any communication here…"
+        class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-600 focus:border-red-500 focus:ring-1 focus:ring-red-500/50 transition resize-none leading-relaxed"></textarea>
+
+      <div class="flex items-center justify-between">
+        <span id="char-count" class="text-xs text-gray-600">0 characters</span>
+        <button id="analyze-btn" onclick="analyze()"
+          class="px-6 py-2.5 bg-red-700 hover:bg-red-600 active:scale-[0.98] rounded-xl text-sm font-semibold text-white transition-all flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+          Analyze for Scam
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="hidden flex-col items-center justify-center py-16 gap-4">
+      <svg class="spinner w-10 h-10 text-red-500" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+      </svg>
+      <div class="text-center">
+        <p class="text-white font-medium">Analyzing behavioral patterns…</p>
+        <p class="text-sm text-gray-500 mt-1">Computing scam-behavior embedding vector</p>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div id="error-banner" class="hidden bg-red-950 border border-red-800 rounded-xl px-5 py-4 text-sm text-red-300 flex gap-3 items-start">
+      <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <span id="error-text"></span>
+    </div>
+
+    <!-- Results -->
+    <div id="results" class="hidden space-y-6">
+
+      <!-- Top row: Risk gauge + Summary -->
+      <div class="fade-up grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        <!-- Risk gauge -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col items-center justify-center gap-3">
+          <div class="relative w-40 h-40">
+            <canvas id="gauge-canvas" width="160" height="160"></canvas>
+          </div>
+          <div id="risk-badge" class="px-4 py-1.5 rounded-full text-sm font-bold border">—</div>
+          <p id="pattern-label" class="text-xs text-gray-500 text-center">—</p>
+        </div>
+
+        <!-- Summary -->
+        <div class="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4 flex flex-col justify-between">
+          <div>
+            <p class="text-xs text-gray-500 font-mono uppercase tracking-wider mb-2">Behavioral Analysis</p>
+            <p id="summary-text" class="text-gray-300 text-sm leading-relaxed">—</p>
+          </div>
+          <div class="bg-gray-800/60 border border-gray-700 rounded-xl p-4">
+            <p class="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1.5">⚡ Recommendation</p>
+            <p id="recommendation-text" class="text-sm text-white leading-relaxed">—</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Behavioral Vector Bars + Radar -->
+      <div class="fade-up grid grid-cols-1 lg:grid-cols-2 gap-4" style="animation-delay:0.06s">
+
+        <!-- Dimension bars -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
+          <h2 class="text-sm font-semibold text-white">Scam-Behavior Vector</h2>
+          <p class="text-xs text-gray-500 -mt-3">Persuasion strategy intensity (0 = none, 1 = extreme)</p>
+          <div id="dim-bars" class="space-y-4"></div>
+        </div>
+
+        <!-- Radar chart -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col items-center gap-3">
+          <h2 class="text-sm font-semibold text-white self-start">Vector Radar</h2>
+          <p class="text-xs text-gray-500 self-start -mt-3">Behavioral embedding shape</p>
+          <canvas id="radar-canvas" width="300" height="280"></canvas>
+        </div>
+      </div>
+
+      <!-- Trigger phrases -->
+      <div class="fade-up" style="animation-delay:0.1s">
+        <h2 class="text-sm font-semibold text-white mb-3">Trigger Phrases Detected</h2>
+        <p class="text-xs text-gray-500 mb-4">Each phrase activates a persuasion dimension in the behavioral embedding</p>
+        <div id="triggers-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+        <p id="no-triggers" class="hidden text-sm text-gray-600 italic">No trigger phrases detected — text appears benign.</p>
+      </div>
+
+      <!-- Methodology -->
+      <div class="fade-up bg-red-950/20 border border-red-800/30 rounded-xl px-5 py-4 text-xs text-red-300/70" style="animation-delay:0.14s">
+        <strong class="text-red-400">Methodology:</strong> <span id="methodology-text">—</span>
+      </div>
+
+      <!-- JSON export -->
+      <details class="fade-up bg-gray-900 border border-gray-800 rounded-xl overflow-hidden" style="animation-delay:0.18s">
+        <summary class="px-5 py-3 text-sm text-gray-400 cursor-pointer hover:text-white transition select-none">
+          📋 View raw JSON output (chainable to next agent)
+        </summary>
+        <pre id="json-output" class="px-5 pb-5 text-xs text-green-400 font-mono overflow-x-auto leading-relaxed"></pre>
+      </details>
+    </div>
+
+  </main>
+
+  <!-- ── Script ──────────────────────────────────────────────────────────────── -->
+  <script>
+    const API = 'http://localhost:8005';
+
+    // ── Example texts ──────────────────────────────────────────────────────────
+    const EXAMPLES = {
+      lottery: `CONGRATULATIONS! You have been selected as the WINNER of our International Lottery! Your prize of $2,500,000 USD is waiting to be claimed. This is a LIMITED TIME OFFER — you must claim your reward IMMEDIATELY within 24 hours or the prize will be forfeited. Click the link NOW to verify your identity. Don't miss this once-in-a-lifetime opportunity!`,
+      bank: `URGENT SECURITY ALERT: Your bank account has been SUSPENDED due to suspicious activity. Immediate action is required to prevent permanent closure. Click here NOW to verify your details and restore access. Failure to respond within 2 hours will result in account termination. This message was sent by your bank's security team.`,
+      advance: `Dear Friend, I am Dr. Emmanuel Okafor, legal counsel to late General Sani Abacha. I am seeking a trustworthy foreign partner to help transfer $47.5 million USD from a dormant account. You will receive 30% of the total sum as your compensation. Please respond with utmost confidentiality. God bless you.`,
+      romance: `My darling, I know we have only spoken for two weeks but I feel a deep connection I have never felt before. I am currently stuck abroad and I urgently need your help. I have a medical emergency and need $3,000 to pay the hospital. I promise I will pay you back double when I return. Please, you are my only hope. I love you.`,
+      legit: `Hi Sarah, just a reminder that your dentist appointment is scheduled for tomorrow, Tuesday July 21st at 2:00 PM. Please call us at (555) 123-4567 if you need to reschedule. We look forward to seeing you. — Bright Smile Dental Office`,
+    };
+
+    function loadExample(key) {
+      document.getElementById('input-text').value = EXAMPLES[key] || '';
+      updateCharCount();
+    }
+
+    // ── Char count ─────────────────────────────────────────────────────────────
+    document.getElementById('input-text').addEventListener('input', updateCharCount);
+    function updateCharCount() {
+      const len = document.getElementById('input-text').value.length;
+      document.getElementById('char-count').textContent = `${len.toLocaleString()} characters`;
+    }
+
+    // ── Health check ───────────────────────────────────────────────────────────
+    async function checkHealth() {
+      try {
+        const r = await fetch(`${API}/health`);
+        if (r.ok) {
+          document.getElementById('status-dot').className = 'w-2 h-2 rounded-full bg-emerald-500 dot-pulse';
+          document.getElementById('status-text').textContent = 'backend online';
+        } else { throw new Error(); }
+      } catch {
+        document.getElementById('status-dot').className = 'w-2 h-2 rounded-full bg-red-500';
+        document.getElementById('status-text').textContent = 'backend offline';
+      }
+    }
+
+    // ── Analyze ────────────────────────────────────────────────────────────────
+    async function analyze() {
+      const text = document.getElementById('input-text').value.trim();
+      if (!text) { showError('Please paste a message to analyze.'); return; }
+
+      hideError();
+      showLoading(true);
+      document.getElementById('results').classList.add('hidden');
+
+      try {
+        const res  = await fetch(`${API}/analyze`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ text }),
+        });
+        const data = await res.json();
+        if (!res.ok) { showError(data.detail || `HTTP ${res.status}`); return; }
+        renderResults(data);
+      } catch (err) {
+        showError(`Network error: ${err.message}. Is the backend running on port 8005?`);
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // ── Render ─────────────────────────────────────────────────────────────────
+    function renderResults(data) {
+      const bv = data.behavioral_vector || {};
+      const prob = data.scam_probability ?? 0.5;
+
+      // Gauge
+      drawGauge(prob, data.risk_tier);
+
+      // Risk badge
+      const badge = document.getElementById('risk-badge');
+      badge.textContent = `${data.risk_tier || 'UNKNOWN'} RISK`;
+      badge.className = `px-4 py-1.5 rounded-full text-sm font-bold border tier-${data.risk_tier || 'MEDIUM'}`;
+
+      document.getElementById('pattern-label').textContent = data.pattern_type || '—';
+
+      // Summary
+      document.getElementById('summary-text').textContent     = data.summary || '—';
+      document.getElementById('recommendation-text').textContent = data.recommendation || '—';
+
+      // Dimension bars
+      renderDimBars(bv);
+
+      // Radar
+      drawRadar(bv);
+
+      // Trigger phrases
+      renderTriggers(data.trigger_phrases || []);
+
+      // Methodology
+      document.getElementById('methodology-text').textContent = data.methodology || '—';
+
+      // JSON
+      document.getElementById('json-output').textContent = JSON.stringify(data, null, 2);
+
+      document.getElementById('results').classList.remove('hidden');
+    }
+
+    // ── Gauge (semi-circle) ────────────────────────────────────────────────────
+    function drawGauge(prob, tier) {
+      const canvas = document.getElementById('gauge-canvas');
+      const ctx    = canvas.getContext('2d');
+      const cx = 80, cy = 100, r = 64;
+
+      ctx.clearRect(0, 0, 160, 160);
+
+      // Background arc
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, Math.PI, 0, false);
+      ctx.lineWidth = 14;
+      ctx.strokeStyle = '#1f2937';
+      ctx.stroke();
+
+      // Color by tier
+      const colors = { CRITICAL:'#ef4444', HIGH:'#f97316', MEDIUM:'#eab308', LOW:'#3b82f6', SAFE:'#10b981' };
+      const col = colors[tier] || '#6b7280';
+
+      // Value arc
+      const angle = Math.PI + Math.PI * Math.min(1, Math.max(0, prob));
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, Math.PI, angle, false);
+      ctx.lineWidth = 14;
+      ctx.strokeStyle = col;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Needle
+      const needleAngle = Math.PI + Math.PI * Math.min(1, Math.max(0, prob));
+      const nx = cx + (r - 8) * Math.cos(needleAngle);
+      const ny = cy + (r - 8) * Math.sin(needleAngle);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(nx, ny);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#f9fafb';
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Center dot
+      ctx.beginPath();
+      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#f9fafb';
+      ctx.fill();
+
+      // Probability text
+      ctx.font = 'bold 26px sans-serif';
+      ctx.fillStyle = col;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${Math.round(prob * 100)}%`, cx, cy - 22);
+
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = '#9ca3af';
+      ctx.fillText('scam probability', cx, cy - 4);
+    }
+
+    // ── Dimension bars ─────────────────────────────────────────────────────────
+    const DIM_META = [
+      { key: 'urgency',                    label: 'Urgency',                     color: '#ef4444', icon: '⏱️' },
+      { key: 'psychological_manipulation', label: 'Psychological Manipulation',  color: '#a855f7', icon: '🧠' },
+      { key: 'financial_lure',             label: 'Financial Lure',              color: '#eab308', icon: '💰' },
+      { key: 'emotional_exploitation',     label: 'Emotional Exploitation',      color: '#f97316', icon: '💔' },
+    ];
+
+    function renderDimBars(bv) {
+      const container = document.getElementById('dim-bars');
+      container.innerHTML = '';
+      DIM_META.forEach(dim => {
+        const val = bv[dim.key] ?? 0;
+        const pct = Math.round(val * 100);
+        const div = document.createElement('div');
+        div.className = 'space-y-1.5';
+        div.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-gray-300 flex items-center gap-1.5">
+              <span>${dim.icon}</span>${dim.label}
+            </span>
+            <span class="text-xs font-mono font-bold" style="color:${dim.color}">${pct}%</span>
+          </div>
+          <div class="h-2 bg-gray-800 rounded-full overflow-hidden">
+            <div class="h-full rounded-full bar-fill" style="width:${pct}%;background:${dim.color};--w:${pct}%"></div>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    // ── Radar chart ────────────────────────────────────────────────────────────
+    function drawRadar(bv) {
+      const canvas = document.getElementById('radar-canvas');
+      const ctx    = canvas.getContext('2d');
+      const W = 300, H = 280;
+      ctx.clearRect(0, 0, W, H);
+
+      const cx = W / 2, cy = H / 2 + 10;
+      const maxR = 100;
+      const dims = [
+        { key: 'urgency',                    label: 'Urgency',       color: '#ef4444' },
+        { key: 'psychological_manipulation', label: 'Manipulation',  color: '#a855f7' },
+        { key: 'financial_lure',             label: 'Financial',     color: '#eab308' },
+        { key: 'emotional_exploitation',     label: 'Emotional',     color: '#f97316' },
+      ];
+      const n = dims.length;
+
+      function polarX(i, r) { return cx + r * Math.cos((2 * Math.PI * i / n) - Math.PI / 2); }
+      function polarY(i, r) { return cy + r * Math.sin((2 * Math.PI * i / n) - Math.PI / 2); }
+
+      // Grid rings
+      [0.25, 0.5, 0.75, 1.0].forEach(frac => {
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+          const px = polarX(i, maxR * frac);
+          const py = polarY(i, maxR * frac);
+          i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = frac === 1 ? '#374151' : '#1f2937';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      });
+
+      // Axes
+      dims.forEach((_, i) => {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(polarX(i, maxR), polarY(i, maxR));
+        ctx.strokeStyle = '#374151';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      });
+
+      // Data polygon
+      ctx.beginPath();
+      dims.forEach((dim, i) => {
+        const val = bv[dim.key] ?? 0;
+        const px = polarX(i, maxR * val);
+        const py = polarY(i, maxR * val);
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.fillStyle   = 'rgba(239,68,68,0.18)';
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth   = 2;
+      ctx.fill();
+      ctx.stroke();
+
+      // Data points
+      dims.forEach((dim, i) => {
+        const val = bv[dim.key] ?? 0;
+        ctx.beginPath();
+        ctx.arc(polarX(i, maxR * val), polarY(i, maxR * val), 5, 0, Math.PI * 2);
+        ctx.fillStyle = dim.color;
+        ctx.fill();
+      });
+
+      // Labels
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      dims.forEach((dim, i) => {
+        const lx = polarX(i, maxR + 22);
+        const ly = polarY(i, maxR + 22);
+        ctx.fillStyle = dim.color;
+        ctx.textBaseline = ly < cy ? 'bottom' : 'top';
+        ctx.fillText(dim.label, lx, ly);
+      });
+
+      // Ring labels
+      ctx.font = '9px monospace';
+      ctx.fillStyle = '#6b7280';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      [0.25, 0.5, 0.75, 1.0].forEach(frac => {
+        ctx.fillText((frac * 100).toFixed(0), cx + 4, cy - maxR * frac + 2);
+      });
+    }
+
+    // ── Trigger phrases ────────────────────────────────────────────────────────
+    const DIM_COLOR_CLASS = {
+      urgency:                    'trigger-urgency',
+      psychological_manipulation: 'trigger-manipulation',
+      financial_lure:             'trigger-financial',
+      emotional_exploitation:     'trigger-emotional',
+    };
+    const DIM_LABEL = {
+      urgency:                    'Urgency',
+      psychological_manipulation: 'Manipulation',
+      financial_lure:             'Financial Lure',
+      emotional_exploitation:     'Emotional',
+    };
+    const DIM_ICON = {
+      urgency: '⏱️', psychological_manipulation: '🧠', financial_lure: '💰', emotional_exploitation: '💔',
+    };
+
+    function renderTriggers(triggers) {
+      const grid  = document.getElementById('triggers-grid');
+      const empty = document.getElementById('no-triggers');
+      grid.innerHTML = '';
+
+      if (!triggers.length) {
+        empty.classList.remove('hidden');
+        return;
+      }
+      empty.classList.add('hidden');
+
+      triggers.forEach((t, i) => {
+        const cls  = DIM_COLOR_CLASS[t.dimension] || 'bg-gray-800 border-gray-700';
+        const lbl  = DIM_LABEL[t.dimension] || t.dimension;
+        const icon = DIM_ICON[t.dimension] || '🔴';
+        const pct  = Math.round((t.score ?? 0) * 100);
+        const card = document.createElement('div');
+        card.className = `fade-up border rounded-xl p-4 space-y-2 ${cls}`;
+        card.style.animationDelay = `${0.1 + i * 0.04}s`;
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-white flex items-center gap-1">${icon} ${escapeHtml(lbl)}</span>
+            <span class="text-xs font-mono text-gray-400">${pct}%</span>
+          </div>
+          <p class="text-sm font-semibold text-white">"${escapeHtml(t.phrase)}"</p>
+          <p class="text-xs text-gray-400 leading-relaxed">${escapeHtml(t.explanation || '')}</p>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    function showLoading(on) {
+      const el = document.getElementById('loading');
+      el.classList.toggle('hidden', !on);
+      el.classList.toggle('flex', on);
+      document.getElementById('analyze-btn').disabled = on;
+      document.getElementById('analyze-btn').classList.toggle('opacity-50', on);
+    }
+
+    function showError(msg) {
+      document.getElementById('error-text').textContent = msg;
+      document.getElementById('error-banner').classList.remove('hidden');
+    }
+
+    function hideError() {
+      document.getElementById('error-banner').classList.add('hidden');
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────────────
+    checkHealth();
+    setInterval(checkHealth, 30_000);
+  </script>
+</body>
+</html>

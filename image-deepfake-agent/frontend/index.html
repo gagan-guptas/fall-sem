@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Image Deepfake Detector</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes fadeUp   { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes spin     { to { transform:rotate(360deg); } }
+    @keyframes pulse-dot{ 0%,100%{opacity:1;} 50%{opacity:.3;} }
+    @keyframes fillBar  { from { width:0; } }
+
+    .fade-up   { animation: fadeUp .3s ease both; }
+    .spinner   { animation: spin .8s linear infinite; }
+    .dot-pulse { animation: pulse-dot 1.2s ease-in-out infinite; }
+    .bar-fill  { animation: fillBar .8s cubic-bezier(.4,0,.2,1) both; }
+
+    textarea:focus,input:focus { outline:none; }
+    ::-webkit-scrollbar       { width:6px; }
+    ::-webkit-scrollbar-thumb { background:#374151; border-radius:3px; }
+
+    .drop-zone {
+      border: 2px dashed #374151;
+      transition: border-color .2s, background .2s;
+    }
+    .drop-zone.drag-over {
+      border-color: #8b5cf6;
+      background: rgba(139,92,246,.06);
+    }
+
+    /* Radial gauge */
+    .radial-fill {
+      fill: none; stroke-width: 10; stroke-linecap: round;
+      transform: rotate(-90deg); transform-origin: 50% 50%;
+      transition: stroke-dashoffset 1s cubic-bezier(.4,0,.2,1), stroke .4s;
+    }
+    .radial-track { fill: none; stroke: #1f2937; stroke-width: 10; }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans antialiased">
+
+  <!-- Header -->
+  <header class="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-20">
+    <div class="max-w-5xl mx-auto px-6 py-4 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center text-white font-bold text-sm">🖼</div>
+      <div>
+        <span class="font-semibold text-white">Image Deepfake Detector</span>
+        <span class="ml-2 text-xs text-gray-500 font-mono">5-Feature · Data Deception Pipeline</span>
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <span id="status-dot" class="w-2 h-2 rounded-full bg-gray-600"></span>
+        <span id="status-text" class="text-xs text-gray-500">checking…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="max-w-5xl mx-auto px-6 py-10 space-y-8">
+
+    <!-- Hero -->
+    <div class="fade-up">
+      <h1 class="text-3xl font-bold text-white">Detect AI-generated or manipulated images</h1>
+      <p class="mt-2 text-gray-400 max-w-xl">
+        Upload a face image (≤ 10 MB). The agent judges it on exactly
+        <span class="text-violet-400 font-medium">5 forensic features</span> and returns a fake confidence score.
+      </p>
+    </div>
+
+    <!-- 5 feature chips -->
+    <div class="fade-up flex flex-wrap gap-2" style="animation-delay:.04s">
+      <span class="px-3 py-1 rounded-full text-xs font-medium bg-blue-900/40 text-blue-300 border border-blue-800">① Facial Geometry</span>
+      <span class="px-3 py-1 rounded-full text-xs font-medium bg-violet-900/40 text-violet-300 border border-violet-800">② Frequency Artifacts</span>
+      <span class="px-3 py-1 rounded-full text-xs font-medium bg-pink-900/40 text-pink-300 border border-pink-800">③ Skin Texture</span>
+      <span class="px-3 py-1 rounded-full text-xs font-medium bg-cyan-900/40 text-cyan-300 border border-cyan-800">④ Eye &amp; Reflection</span>
+      <span class="px-3 py-1 rounded-full text-xs font-medium bg-amber-900/40 text-amber-300 border border-amber-800">⑤ Edge &amp; Boundary</span>
+    </div>
+
+    <!-- Upload card -->
+    <div class="fade-up bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5" style="animation-delay:.08s">
+
+      <div id="drop-zone"
+        class="drop-zone rounded-xl flex flex-col items-center justify-center gap-3 py-10 cursor-pointer select-none"
+        onclick="document.getElementById('file-input').click()"
+        ondragover="onDragOver(event)" ondragleave="onDragLeave()" ondrop="onDrop(event)">
+        <svg class="w-10 h-10 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/>
+        </svg>
+        <div class="text-center">
+          <p class="text-gray-300 font-medium">Drop an image here or <span class="text-violet-400">click to browse</span></p>
+          <p class="text-xs text-gray-600 mt-1">JPEG · PNG · WebP · max 10 MB</p>
+        </div>
+        <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="onFileSelect(event)" />
+      </div>
+
+      <!-- Preview row -->
+      <div id="preview-row" class="hidden flex items-center gap-4">
+        <img id="img-thumb" src="" alt="" class="w-20 h-20 rounded-xl object-cover border border-gray-700 flex-shrink-0" />
+        <div class="flex-1 min-w-0">
+          <p id="file-name" class="text-sm text-white truncate"></p>
+          <p id="file-meta" class="text-xs text-gray-500 mt-0.5"></p>
+        </div>
+        <button onclick="clearFile()" class="text-xs text-gray-500 hover:text-red-400 transition flex-shrink-0">✕ Remove</button>
+      </div>
+
+      <button id="analyze-btn" onclick="analyze()" disabled
+        class="w-full py-3 bg-violet-600 hover:bg-violet-500 active:scale-[.98] rounded-xl text-sm font-semibold text-white transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        Detect Deepfake
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="hidden flex-col items-center justify-center py-16 gap-5">
+      <svg class="spinner w-10 h-10 text-violet-500" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+      </svg>
+      <div class="text-center">
+        <p class="text-white font-medium">Analyzing image…</p>
+        <p class="text-sm text-gray-500 mt-1">Gemini is inspecting all 5 forensic features</p>
+        <div class="mt-4 flex items-center justify-center gap-4 text-xs text-gray-600 flex-wrap">
+          <span id="s1" class="flex items-center gap-1.5"><span class="sd w-1.5 h-1.5 rounded-full bg-gray-700 inline-block"></span>Facial Geometry</span>
+          <span id="s2" class="flex items-center gap-1.5"><span class="sd w-1.5 h-1.5 rounded-full bg-gray-700 inline-block"></span>Frequency</span>
+          <span id="s3" class="flex items-center gap-1.5"><span class="sd w-1.5 h-1.5 rounded-full bg-gray-700 inline-block"></span>Skin Texture</span>
+          <span id="s4" class="flex items-center gap-1.5"><span class="sd w-1.5 h-1.5 rounded-full bg-gray-700 inline-block"></span>Eye &amp; Reflection</span>
+          <span id="s5" class="flex items-center gap-1.5"><span class="sd w-1.5 h-1.5 rounded-full bg-gray-700 inline-block"></span>Edge &amp; Boundary</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div id="error-banner" class="hidden bg-red-950 border border-red-800 rounded-xl px-5 py-4 text-sm text-red-300 flex gap-3 items-start">
+      <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <span id="error-text"></span>
+    </div>
+
+    <!-- Results -->
+    <div id="results" class="hidden space-y-6">
+
+      <!-- Score + summary row -->
+      <div class="fade-up flex flex-col sm:flex-row gap-5">
+
+        <!-- Gauge -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col items-center gap-3 min-w-[200px]">
+          <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold">Fake Score</p>
+          <div class="relative w-36 h-36">
+            <svg class="w-full h-full" viewBox="0 0 120 120">
+              <circle class="radial-track" cx="60" cy="60" r="50"/>
+              <circle id="gauge-fill" class="radial-fill" cx="60" cy="60" r="50"
+                stroke-dasharray="314" stroke-dashoffset="314"/>
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center">
+              <span id="score-pct" class="text-3xl font-bold text-white">0%</span>
+              <span class="text-xs text-gray-500 mt-0.5">confidence</span>
+            </div>
+          </div>
+          <div id="verdict-badge" class="px-3 py-1 rounded-full text-xs font-semibold border">—</div>
+        </div>
+
+        <!-- Summary panel -->
+        <div class="flex-1 bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-3">
+          <p class="text-xs text-gray-500 uppercase tracking-widest font-semibold">Assessment</p>
+          <p id="result-summary" class="text-sm text-gray-300 leading-relaxed"></p>
+          <p id="result-note" class="text-xs text-gray-600 italic"></p>
+          <div class="flex gap-4 pt-1 text-xs text-gray-600">
+            <span>Model: <span id="result-model" class="text-violet-400 font-mono"></span></span>
+            <span>Size: <span id="result-size" class="text-violet-400 font-mono"></span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5 feature cards (2+2+1 layout) -->
+      <div id="feature-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+
+      <!-- JSON export -->
+      <details class="fade-up bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <summary class="px-5 py-3 text-sm text-gray-400 cursor-pointer hover:text-white transition select-none">
+          📋 View raw JSON output
+        </summary>
+        <pre id="json-out" class="px-5 pb-5 text-xs text-green-400 font-mono overflow-x-auto leading-relaxed"></pre>
+      </details>
+    </div>
+
+  </main>
+
+  <script>
+    const API = 'http://localhost:8003';
+    let file = null;
+
+    const FEATURES = [
+      { key: 'facial_geometry',    label: '① Facial Geometry',    desc: 'Symmetry, proportions, structural coherence', color: 'blue',   icon: 'M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z' },
+      { key: 'frequency_artifacts', label: '② Frequency Artifacts', desc: 'GAN/diffusion checkerboard, spectral noise',   color: 'violet', icon: 'M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5' },
+      { key: 'skin_texture',        label: '③ Skin Texture',        desc: 'Pore loss, over-smoothing, blending zones',   color: 'pink',   icon: 'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z' },
+      { key: 'eye_reflection',      label: '④ Eye & Reflection',    desc: 'Catchlights, iris patterns, cornea edges',    color: 'cyan',   icon: 'M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
+      { key: 'edge_boundary',       label: '⑤ Edge & Boundary',     desc: 'Hair seams, halo, color fringing, blending',  color: 'amber',  icon: 'M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z' },
+    ];
+
+    const CC = {
+      blue:   { border:'border-blue-800',   bg:'bg-blue-900/30',   bar:'bg-blue-500',   text:'text-blue-300',   badge:'bg-blue-900/50 text-blue-300 border-blue-700'   },
+      violet: { border:'border-violet-800', bg:'bg-violet-900/30', bar:'bg-violet-500', text:'text-violet-300', badge:'bg-violet-900/50 text-violet-300 border-violet-700' },
+      pink:   { border:'border-pink-800',   bg:'bg-pink-900/30',   bar:'bg-pink-500',   text:'text-pink-300',   badge:'bg-pink-900/50 text-pink-300 border-pink-700'   },
+      cyan:   { border:'border-cyan-800',   bg:'bg-cyan-900/30',   bar:'bg-cyan-500',   text:'text-cyan-300',   badge:'bg-cyan-900/50 text-cyan-300 border-cyan-700'   },
+      amber:  { border:'border-amber-800',  bg:'bg-amber-900/30',  bar:'bg-amber-500',  text:'text-amber-300',  badge:'bg-amber-900/50 text-amber-300 border-amber-700' },
+    };
+
+    // Health
+    async function checkHealth() {
+      try {
+        const r = await fetch(`${API}/health`);
+        document.getElementById('status-dot').className  = r.ok ? 'w-2 h-2 rounded-full bg-emerald-500 dot-pulse' : 'w-2 h-2 rounded-full bg-red-500';
+        document.getElementById('status-text').textContent = r.ok ? 'backend online' : 'backend offline';
+      } catch {
+        document.getElementById('status-dot').className  = 'w-2 h-2 rounded-full bg-red-500';
+        document.getElementById('status-text').textContent = 'backend offline';
+      }
+    }
+
+    // Drag-drop
+    function onDragOver(e) { e.preventDefault(); document.getElementById('drop-zone').classList.add('drag-over'); }
+    function onDragLeave() { document.getElementById('drop-zone').classList.remove('drag-over'); }
+    function onDrop(e) { e.preventDefault(); document.getElementById('drop-zone').classList.remove('drag-over'); if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); }
+    function onFileSelect(e) { if (e.target.files[0]) setFile(e.target.files[0]); }
+
+    function setFile(f) {
+      file = f;
+      const url = URL.createObjectURL(f);
+      document.getElementById('img-thumb').src = url;
+      document.getElementById('file-name').textContent = f.name;
+      document.getElementById('file-meta').textContent = `${(f.size/1048576).toFixed(2)} MB · ${f.type}`;
+      document.getElementById('preview-row').classList.remove('hidden');
+      document.getElementById('analyze-btn').disabled = false;
+      hideError(); hideResults();
+    }
+
+    function clearFile() {
+      file = null;
+      document.getElementById('file-input').value = '';
+      document.getElementById('preview-row').classList.add('hidden');
+      document.getElementById('analyze-btn').disabled = true;
+      hideResults();
+    }
+
+    // Analyze
+    async function analyze() {
+      if (!file) { showError('Please select an image first.'); return; }
+      hideError(); hideResults(); setLoading(true);
+      animateSteps();
+
+      const base64 = await toBase64(file);
+
+      try {
+        const res  = await fetch(`${API}/analyze-image`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ image_base64: base64, mime_type: file.type }),
+        });
+        const data = await res.json();
+        if (!res.ok) { showError(data.detail || `HTTP ${res.status}`); return; }
+        renderResults(data);
+      } catch (e) {
+        showError(`Network error: ${e.message}. Is the backend running on port 8003?`);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function toBase64(f) {
+      return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload  = () => res(r.result.split(',')[1]);
+        r.onerror = () => rej(r.error);
+        r.readAsDataURL(f);
+      });
+    }
+
+    // Render
+    function renderResults(data) {
+      const pct = Math.round(data.fake_confidence_score * 100);
+
+      // Gauge
+      document.getElementById('score-pct').textContent = `${pct}%`;
+      const fill = document.getElementById('gauge-fill');
+      fill.style.strokeDashoffset = 314 - (pct / 100) * 314;
+      fill.style.stroke = gaugeColor(pct);
+
+      // Verdict
+      const vb = document.getElementById('verdict-badge');
+      vb.textContent = data.verdict;
+      vb.className   = `px-3 py-1 rounded-full text-xs font-semibold border ${verdictCls(data.verdict)}`;
+
+      document.getElementById('result-summary').textContent = data.summary || '—';
+      document.getElementById('result-note').textContent    = data.note    || '';
+      document.getElementById('result-model').textContent   = data.model_used    || '—';
+      document.getElementById('result-size').textContent    = `${data.image_size_mb} MB`;
+
+      renderFeatureCards(data.features);
+      document.getElementById('json-out').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('results').classList.remove('hidden');
+    }
+
+    function renderFeatureCards(features) {
+      const grid = document.getElementById('feature-grid');
+      grid.innerHTML = '';
+      FEATURES.forEach((cfg, i) => {
+        const f  = features[cfg.key] || { score: 0, label: 'N/A', finding: '' };
+        const cc = CC[cfg.color];
+        const pct = Math.round(f.score * 100);
+
+        const card = document.createElement('div');
+        card.className = `fade-up bg-gray-900 border ${cc.border} rounded-2xl p-5 space-y-3`;
+        card.style.animationDelay = `${i * 0.07}s`;
+
+        card.innerHTML = `
+          <div class="flex items-start gap-3">
+            <div class="w-9 h-9 rounded-lg ${cc.bg} border ${cc.border} flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 ${cc.text}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="${cfg.icon}"/>
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-sm font-semibold text-white">${cfg.label}</p>
+                <span class="px-2 py-0.5 rounded-md text-xs font-semibold border flex-shrink-0 ${cc.badge}">${f.label}</span>
+              </div>
+              <p class="text-xs text-gray-600 mt-0.5">${cfg.desc}</p>
+            </div>
+          </div>
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs text-gray-500">
+              <span>Suspicion</span>
+              <span class="font-mono ${cc.text}">${pct}%</span>
+            </div>
+            <div class="bg-gray-800 rounded-full h-2 overflow-hidden">
+              <div class="bar-fill h-full rounded-full ${cc.bar}" style="width:${pct}%;animation-delay:${i*.1}s"></div>
+            </div>
+          </div>
+          <p class="text-xs text-gray-400 leading-relaxed">${esc(f.finding)}</p>`;
+
+        grid.appendChild(card);
+      });
+    }
+
+    function animateSteps() {
+      const ids    = ['s1','s2','s3','s4','s5'];
+      const colors = ['text-blue-400','text-violet-400','text-pink-400','text-cyan-400','text-amber-400'];
+      const dots   = ['bg-blue-400','bg-violet-400','bg-pink-400','bg-cyan-400','bg-amber-400'];
+      ids.forEach((id, i) => {
+        setTimeout(() => {
+          const el = document.getElementById(id);
+          el.querySelector('.sd').className = `sd w-1.5 h-1.5 rounded-full ${dots[i]} inline-block dot-pulse`;
+          el.className = el.className.replace('text-gray-600', colors[i]);
+        }, i * 900);
+      });
+    }
+
+    function gaugeColor(pct) {
+      if (pct >= 75) return '#ef4444';
+      if (pct >= 55) return '#f97316';
+      if (pct >= 35) return '#eab308';
+      return '#22c55e';
+    }
+
+    function verdictCls(v) {
+      if (!v) return 'bg-gray-800 text-gray-400 border-gray-700';
+      const u = v.toUpperCase();
+      if (u === 'FAKE')             return 'bg-red-900/60 text-red-300 border-red-700';
+      if (u === 'LIKELY FAKE')      return 'bg-orange-900/60 text-orange-300 border-orange-700';
+      if (u === 'UNCERTAIN')        return 'bg-yellow-900/60 text-yellow-300 border-yellow-700';
+      if (u === 'LIKELY AUTHENTIC') return 'bg-teal-900/60 text-teal-300 border-teal-700';
+      return 'bg-emerald-900/60 text-emerald-300 border-emerald-700';
+    }
+
+    function setLoading(on) {
+      const el = document.getElementById('loading');
+      el.classList.toggle('hidden', !on);
+      el.classList.toggle('flex', on);
+      document.getElementById('analyze-btn').disabled = on;
+      document.getElementById('analyze-btn').classList.toggle('opacity-50', on);
+    }
+
+    function hideResults() { document.getElementById('results').classList.add('hidden'); }
+    function showError(msg) {
+      document.getElementById('error-text').textContent = msg;
+      document.getElementById('error-banner').classList.remove('hidden');
+    }
+    function hideError() { document.getElementById('error-banner').classList.add('hidden'); }
+    function esc(s) {
+      return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    checkHealth();
+    setInterval(checkHealth, 30000);
+  </script>
+</body>
+</html>

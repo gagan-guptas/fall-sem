@@ -1,0 +1,674 @@
+<!-- cd "C:\Users\gagan\Downloads\WALMART\data deception\data deception\source-credibility-agent"; & "C:\Program Files\Git\bin\bash.exe" start.sh; node server.js -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent 4 — Source Credibility Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <style>
+    :root {
+      --accent:      #f59e0b;
+      --accent-dark: #d97706;
+    }
+
+    @keyframes fadeUp   { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes spin     { to { transform:rotate(360deg); } }
+    @keyframes pulse-dot{ 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+    @keyframes glow     { 0%,100%{box-shadow:0 0 8px rgba(245,158,11,0.3);} 50%{box-shadow:0 0 22px rgba(245,158,11,0.7);} }
+
+    .fade-up   { animation: fadeUp 0.35s ease both; }
+    .spinner   { animation: spin 0.8s linear infinite; }
+    .dot-pulse { animation: pulse-dot 1.2s ease-in-out infinite; }
+    .score-glow{ animation: glow 2.5s ease-in-out infinite; }
+
+    textarea:focus, input:focus { outline: none; }
+    ::-webkit-scrollbar       { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+
+    /* D3 graph styles */
+    #graph-svg { width:100%; height:420px; }
+
+    .node-circle {
+      cursor: pointer;
+      transition: filter 0.2s;
+    }
+    .node-circle:hover { filter: brightness(1.3) drop-shadow(0 0 8px rgba(255,255,255,0.4)); }
+
+    .node-label {
+      font-size: 11px;
+      font-weight: 600;
+      fill: #e5e7eb;
+      pointer-events: none;
+      text-anchor: middle;
+    }
+    .node-icon {
+      font-size: 18px;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      pointer-events: none;
+    }
+    .node-score {
+      font-size: 9px;
+      fill: #9ca3af;
+      text-anchor: middle;
+      pointer-events: none;
+    }
+
+    .link-line { stroke-opacity: 0.6; }
+    .link-trust    { stroke: #10b981; }
+    .link-distrust { stroke: #ef4444; }
+    .link-neutral  { stroke: #6b7280; stroke-dasharray: 4,3; }
+
+    /* Trust score ring */
+    .ring-bg   { fill: none; stroke: #374151; stroke-width: 10; }
+    .ring-fill { fill: none; stroke-width: 10; stroke-linecap: round;
+                 transition: stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1); }
+
+    /* Signal chips */
+    .signal-chip {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 9999px;
+      border-width: 1px;
+      display: inline-block;
+      margin: 2px;
+    }
+
+    /* Tooltip */
+    #graph-tooltip {
+      position: absolute;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #e5e7eb;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      max-width: 240px;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans antialiased">
+
+  <!-- ── Tooltip ─────────────────────────────────────────────────────────────── -->
+  <div id="graph-tooltip"></div>
+
+  <!-- ── Header ─────────────────────────────────────────────────────────────── -->
+  <header class="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-20">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white font-bold text-sm">A4</div>
+      <div>
+        <span class="font-semibold text-white">Source Credibility Agent</span>
+        <span class="ml-2 text-xs text-gray-500 font-mono">Agent 4 · Data Deception Pipeline</span>
+      </div>
+      <div class="ml-2 flex items-center gap-1.5 px-2 py-1 bg-amber-950/50 border border-amber-800/50 rounded-md">
+        <span class="text-xs text-amber-400 font-mono">GNN</span>
+        <span class="text-xs text-gray-500">Dynamic Trust Graph</span>
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <span id="status-dot" class="w-2 h-2 rounded-full bg-gray-600"></span>
+        <span id="status-text" class="text-xs text-gray-500">checking…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main ───────────────────────────────────────────────────────────────── -->
+  <main class="max-w-6xl mx-auto px-6 py-10 space-y-8">
+
+    <!-- Hero -->
+    <div class="fade-up">
+      <h1 class="text-3xl font-bold text-white">Construct a Dynamic Trust Graph for any source</h1>
+      <p class="mt-2 text-gray-400 max-w-2xl">
+        Enter a source name or URL. The GNN model builds a trust graph across five node types —
+        <span class="text-amber-400">Website, Author, Domain, Social Media,</span> and
+        <span class="text-amber-400">Historical Articles</span> — propagates credibility scores
+        through edges, and outputs an aggregate <strong class="text-white">Trust Score</strong>.
+      </p>
+    </div>
+
+    <!-- Input card -->
+    <div class="fade-up bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4" style="animation-delay:0.05s">
+
+      <!-- Tabs -->
+      <div class="flex gap-1 bg-gray-800 rounded-lg p-1 w-fit">
+        <button id="tab-name" onclick="switchTab('name')"
+          class="tab-btn px-4 py-1.5 rounded-md text-sm font-medium transition-all bg-amber-600 text-white">
+          Source Name
+        </button>
+        <button id="tab-url" onclick="switchTab('url')"
+          class="tab-btn px-4 py-1.5 rounded-md text-sm font-medium transition-all text-gray-400 hover:text-white">
+          URL
+        </button>
+      </div>
+
+      <!-- Name input -->
+      <div id="input-name">
+        <input id="source-name" type="text"
+          placeholder="e.g. The New York Times, InfoWars, BBC News, breitbart.com"
+          class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-600 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 transition" />
+        <div class="flex justify-between items-center mt-2">
+          <span class="text-xs text-gray-600">Enter any news outlet, website, blog, or publisher name</span>
+          <div class="flex gap-2">
+            <button onclick="loadExample('nyt')"    class="text-xs text-amber-400 hover:text-amber-300 transition">NYT ↗</button>
+            <button onclick="loadExample('bbc')"    class="text-xs text-amber-400 hover:text-amber-300 transition">BBC ↗</button>
+            <button onclick="loadExample('infowars')" class="text-xs text-amber-400 hover:text-amber-300 transition">InfoWars ↗</button>
+            <button onclick="loadExample('medium')" class="text-xs text-amber-400 hover:text-amber-300 transition">Medium ↗</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- URL input -->
+      <div id="input-url" class="hidden">
+        <input id="source-url" type="url" placeholder="https://example.com/article"
+          class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-600 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 transition" />
+        <p class="mt-2 text-xs text-gray-600">The backend will fetch & analyze the page to extract source signals.</p>
+      </div>
+
+      <!-- Analyze button -->
+      <button id="analyze-btn" onclick="analyzeSource()"
+        class="w-full py-3 bg-amber-600 hover:bg-amber-500 active:scale-[0.98] rounded-xl text-sm font-semibold text-white transition-all flex items-center justify-center gap-2">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+        </svg>
+        Build Trust Graph
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="hidden flex-col items-center justify-center py-16 gap-4">
+      <svg class="spinner w-10 h-10 text-amber-500" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+      </svg>
+      <div class="text-center">
+        <p class="text-white font-medium">Building trust graph…</p>
+        <p class="text-sm text-gray-500 mt-1" id="loading-sub">Propagating GNN scores across graph nodes</p>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div id="error-banner" class="hidden bg-red-950 border border-red-800 rounded-xl px-5 py-4 text-sm text-red-300 flex gap-3 items-start">
+      <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <span id="error-text"></span>
+    </div>
+
+    <!-- Results -->
+    <div id="results" class="hidden space-y-6">
+
+      <!-- Source label + Trust Score + Summary row -->
+      <div class="fade-up grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        <!-- Trust Score Ring -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col items-center justify-center gap-3 score-glow">
+          <div class="relative w-36 h-36">
+            <svg viewBox="0 0 120 120" class="w-full h-full -rotate-90">
+              <circle class="ring-bg" cx="60" cy="60" r="50"/>
+              <circle id="ring-fill" class="ring-fill" cx="60" cy="60" r="50"
+                stroke="#f59e0b"
+                stroke-dasharray="314"
+                stroke-dashoffset="314"/>
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center">
+              <span id="score-number" class="text-4xl font-black text-white">—</span>
+              <span class="text-xs text-gray-500 mt-0.5">/ 100</span>
+            </div>
+          </div>
+          <div id="trust-badge" class="px-3 py-1 rounded-full text-xs font-semibold border">—</div>
+          <p class="text-xs text-gray-500 text-center">Aggregate GNN Trust Score</p>
+        </div>
+
+        <!-- Summary -->
+        <div class="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-500 font-mono uppercase tracking-wider">Source</span>
+            <span id="source-label" class="text-white font-semibold text-sm">—</span>
+          </div>
+          <p id="summary-text" class="text-gray-300 text-sm leading-relaxed">—</p>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <p class="text-xs text-emerald-400 font-semibold mb-1.5">✅ Positive Signals</p>
+              <ul id="positive-list" class="space-y-1"></ul>
+            </div>
+            <div>
+              <p class="text-xs text-red-400 font-semibold mb-1.5">🚩 Red Flags</p>
+              <ul id="flags-list" class="space-y-1"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Graph Visualization -->
+      <div class="fade-up bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden" style="animation-delay:0.08s">
+        <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-semibold text-white">Dynamic Trust Graph</h2>
+            <p class="text-xs text-gray-500 mt-0.5">Nodes colored by trust score · Edges show trust/distrust propagation</p>
+          </div>
+          <div class="flex gap-4 text-xs text-gray-500">
+            <span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-emerald-500 inline-block"></span> Trust</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-red-500 inline-block"></span> Distrust</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-gray-500 inline-block border-dashed border"></span> Neutral</span>
+          </div>
+        </div>
+        <div class="relative bg-gray-950/50">
+          <svg id="graph-svg"></svg>
+        </div>
+      </div>
+
+      <!-- Node breakdown grid -->
+      <div class="fade-up" style="animation-delay:0.12s">
+        <h2 class="text-sm font-semibold text-white mb-3">Node-Level Analysis</h2>
+        <div id="node-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+      </div>
+
+      <!-- Methodology note -->
+      <div class="fade-up bg-amber-950/20 border border-amber-800/30 rounded-xl px-5 py-4 text-xs text-amber-300/70" style="animation-delay:0.16s">
+        <strong class="text-amber-400">Methodology:</strong> <span id="methodology-text">—</span>
+      </div>
+
+      <!-- JSON export -->
+      <details class="fade-up bg-gray-900 border border-gray-800 rounded-xl overflow-hidden" style="animation-delay:0.2s">
+        <summary class="px-5 py-3 text-sm text-gray-400 cursor-pointer hover:text-white transition select-none">
+          📋 View raw JSON output (chainable to next agent)
+        </summary>
+        <pre id="json-output" class="px-5 pb-5 text-xs text-green-400 font-mono overflow-x-auto leading-relaxed"></pre>
+      </details>
+    </div>
+
+  </main>
+
+  <!-- ── Script ──────────────────────────────────────────────────────────────── -->
+  <script>
+    const API = 'http://localhost:8004';
+    let currentData = null;
+
+    // ── Health check ───────────────────────────────────────────────────────────
+    async function checkHealth() {
+      try {
+        const r = await fetch(`${API}/health`);
+        if (r.ok) {
+          document.getElementById('status-dot').className = 'w-2 h-2 rounded-full bg-emerald-500 dot-pulse';
+          document.getElementById('status-text').textContent = 'backend online';
+        } else { throw new Error(); }
+      } catch {
+        document.getElementById('status-dot').className = 'w-2 h-2 rounded-full bg-red-500';
+        document.getElementById('status-text').textContent = 'backend offline';
+      }
+    }
+
+    // ── Tabs ───────────────────────────────────────────────────────────────────
+    function switchTab(tab) {
+      const isName = tab === 'name';
+      document.getElementById('input-name').classList.toggle('hidden', !isName);
+      document.getElementById('input-url').classList.toggle('hidden', isName);
+      document.getElementById('tab-name').className = `tab-btn px-4 py-1.5 rounded-md text-sm font-medium transition-all ${isName ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-white'}`;
+      document.getElementById('tab-url').className  = `tab-btn px-4 py-1.5 rounded-md text-sm font-medium transition-all ${!isName ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-white'}`;
+    }
+
+    // ── Examples ───────────────────────────────────────────────────────────────
+    const EXAMPLES = {
+      nyt:      'The New York Times',
+      bbc:      'BBC News',
+      infowars: 'InfoWars',
+      medium:   'Medium.com',
+    };
+    function loadExample(key) {
+      document.getElementById('source-name').value = EXAMPLES[key] || key;
+      switchTab('name');
+    }
+
+    // ── Trust color helpers ────────────────────────────────────────────────────
+    function trustColor(score01) {
+      if (score01 >= 0.75) return '#10b981'; // emerald
+      if (score01 >= 0.55) return '#22d3ee'; // cyan
+      if (score01 >= 0.35) return '#f59e0b'; // amber
+      if (score01 >= 0.15) return '#f97316'; // orange
+      return '#ef4444';                       // red
+    }
+
+    function trustBadgeClass(label) {
+      const m = {
+        'High Trust':       'bg-emerald-900/60 text-emerald-300 border-emerald-700',
+        'Moderate Trust':   'bg-cyan-900/60 text-cyan-300 border-cyan-700',
+        'Low Trust':        'bg-amber-900/60 text-amber-300 border-amber-700',
+        'Very Low Trust':   'bg-orange-900/60 text-orange-300 border-orange-700',
+        'Unverifiable':     'bg-gray-800 text-gray-400 border-gray-600',
+      };
+      return m[label] || 'bg-gray-800 text-gray-400 border-gray-600';
+    }
+
+    // ── Analyze ────────────────────────────────────────────────────────────────
+    async function analyzeSource() {
+      const nameVisible = !document.getElementById('input-name').classList.contains('hidden');
+      const sourceName  = document.getElementById('source-name').value.trim();
+      const sourceUrl   = document.getElementById('source-url').value.trim();
+
+      if (nameVisible && !sourceName) { showError('Please enter a source name.'); return; }
+      if (!nameVisible && !sourceUrl) { showError('Please enter a URL.'); return; }
+
+      hideError();
+      showLoading(true);
+      hideResults();
+
+      try {
+        const body = nameVisible
+          ? { source_name: sourceName }
+          : { url: sourceUrl };
+
+        const res  = await fetch(`${API}/analyze-source`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(body),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          showError(data.detail || `HTTP ${res.status}`);
+          showLoading(false);
+          return;
+        }
+
+        currentData = data;
+        renderResults(data);
+      } catch (err) {
+        showError(`Network error: ${err.message}. Is the backend running on port 8004?`);
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // ── Render ─────────────────────────────────────────────────────────────────
+    function renderResults(data) {
+      const score = data.trust_score ?? 50;
+
+      // Ring animation
+      const circumference = 314;
+      const offset = circumference - (score / 100) * circumference;
+      const ring = document.getElementById('ring-fill');
+      ring.style.stroke = trustColor(score / 100);
+      // Trigger animation by resetting then setting
+      ring.style.strokeDashoffset = circumference;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => { ring.style.strokeDashoffset = offset; });
+      });
+
+      document.getElementById('score-number').textContent = score;
+
+      // Trust badge
+      const badge = document.getElementById('trust-badge');
+      badge.textContent = data.trust_label || 'Unverifiable';
+      badge.className = `px-3 py-1 rounded-full text-xs font-semibold border ${trustBadgeClass(data.trust_label)}`;
+
+      // Source + summary
+      document.getElementById('source-label').textContent = data.source || '—';
+      document.getElementById('summary-text').textContent  = data.summary || '—';
+
+      // Positive signals
+      const posEl = document.getElementById('positive-list');
+      posEl.innerHTML = '';
+      (data.positive_signals || []).forEach(s => {
+        const li = document.createElement('li');
+        li.className = 'text-xs text-gray-400 flex gap-1.5 items-start';
+        li.innerHTML = `<span class="text-emerald-500 mt-0.5 flex-shrink-0">•</span>${escapeHtml(s)}`;
+        posEl.appendChild(li);
+      });
+      if (!data.positive_signals?.length) posEl.innerHTML = '<li class="text-xs text-gray-600">None identified</li>';
+
+      // Red flags
+      const flagsEl = document.getElementById('flags-list');
+      flagsEl.innerHTML = '';
+      (data.red_flags || []).forEach(f => {
+        const li = document.createElement('li');
+        li.className = 'text-xs text-gray-400 flex gap-1.5 items-start';
+        li.innerHTML = `<span class="text-red-500 mt-0.5 flex-shrink-0">•</span>${escapeHtml(f)}`;
+        flagsEl.appendChild(li);
+      });
+      if (!data.red_flags?.length) flagsEl.innerHTML = '<li class="text-xs text-gray-600">None identified</li>';
+
+      // Methodology
+      document.getElementById('methodology-text').textContent = data.methodology || '—';
+
+      // Node grid
+      renderNodeGrid(data.nodes || []);
+
+      // Graph
+      renderGraph(data.nodes || [], data.edges || []);
+
+      // JSON
+      document.getElementById('json-output').textContent = JSON.stringify(data, null, 2);
+
+      document.getElementById('results').classList.remove('hidden');
+    }
+
+    // ── Node Grid ──────────────────────────────────────────────────────────────
+    function renderNodeGrid(nodes) {
+      const grid = document.getElementById('node-grid');
+      grid.innerHTML = '';
+
+      nodes.forEach((node, i) => {
+        const score01 = typeof node.trust_score === 'number' ? node.trust_score : 0.5;
+        const pct     = Math.round(score01 * 100);
+        const col     = trustColor(score01);
+        const conf    = Math.round((node.confidence ?? 0.5) * 100);
+
+        const card = document.createElement('div');
+        card.className = 'bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3 fade-up';
+        card.style.animationDelay = `${0.12 + i * 0.05}s`;
+
+        card.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="text-xl">${node.icon || '🔵'}</span>
+            <span class="font-semibold text-sm text-white">${escapeHtml(node.label || node.id)}</span>
+            <span class="ml-auto text-xs font-mono font-bold" style="color:${col}">${pct}%</span>
+          </div>
+          <!-- Mini bar -->
+          <div class="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all" style="width:${pct}%;background:${col}"></div>
+          </div>
+          <!-- Confidence -->
+          <p class="text-xs text-gray-600">Confidence: <span class="text-gray-400">${conf}%</span></p>
+          <!-- Signals -->
+          <div class="flex flex-wrap gap-1">
+            ${(node.signals || []).map(s =>
+              `<span class="signal-chip bg-gray-800 border-gray-700 text-gray-300">${escapeHtml(s)}</span>`
+            ).join('')}
+          </div>
+        `;
+
+        grid.appendChild(card);
+      });
+    }
+
+    // ── D3 Graph ───────────────────────────────────────────────────────────────
+    function renderGraph(nodes, edges) {
+      const svgEl = document.getElementById('graph-svg');
+      svgEl.innerHTML = '';
+
+      const W = svgEl.clientWidth  || svgEl.getBoundingClientRect().width  || 800;
+      const H = 420;
+
+      const svg = d3.select('#graph-svg')
+        .attr('viewBox', `0 0 ${W} ${H}`)
+        .attr('preserveAspectRatio', 'xMidYMid meet');
+
+      // Arrow markers
+      const defs = svg.append('defs');
+      ['trust','distrust','neutral'].forEach(type => {
+        const col = type === 'trust' ? '#10b981' : type === 'distrust' ? '#ef4444' : '#6b7280';
+        defs.append('marker')
+          .attr('id', `arrow-${type}`)
+          .attr('viewBox', '0 -5 10 10')
+          .attr('refX', 28)
+          .attr('refY', 0)
+          .attr('markerWidth', 6)
+          .attr('markerHeight', 6)
+          .attr('orient', 'auto')
+          .append('path')
+          .attr('fill', col)
+          .attr('d', 'M0,-5L10,0L0,5');
+      });
+
+      // Build D3 node/link data
+      const nodeMap = {};
+      const d3Nodes = nodes.map(n => {
+        const obj = { ...n, x: W / 2, y: H / 2 };
+        nodeMap[n.id] = obj;
+        return obj;
+      });
+
+      // Add a central "source" node
+      const sourceNode = {
+        id: '__source__', label: 'Source', icon: '📰',
+        trust_score: (d3Nodes.reduce((s, n) => s + (n.trust_score ?? 0.5), 0) / (d3Nodes.length || 1)),
+        confidence: 1,
+        signals: [],
+        x: W / 2, y: H / 2,
+        isCenter: true,
+      };
+      d3Nodes.push(sourceNode);
+      nodeMap['__source__'] = sourceNode;
+
+      // Auto-connect source to each node
+      const autoEdges = nodes.map(n => ({
+        source: '__source__',
+        target: n.id,
+        type:   n.trust_score >= 0.5 ? 'trust' : 'distrust',
+        weight: n.trust_score ?? 0.5,
+        label:  '',
+      }));
+
+      const d3Links = [...edges, ...autoEdges].map(e => ({
+        ...e,
+        source: nodeMap[e.source] || e.source,
+        target: nodeMap[e.target] || e.target,
+      })).filter(e => e.source && e.target && e.source !== e.target);
+
+      // Force simulation
+      const sim = d3.forceSimulation(d3Nodes)
+        .force('link',   d3.forceLink(d3Links).id(d => d.id).distance(140).strength(0.8))
+        .force('charge', d3.forceManyBody().strength(-300))
+        .force('center', d3.forceCenter(W / 2, H / 2))
+        .force('collide', d3.forceCollide(48));
+
+      // Links
+      const link = svg.append('g').selectAll('line')
+        .data(d3Links).enter().append('line')
+        .attr('class', d => `link-line link-${d.type}`)
+        .attr('stroke-width', d => 1 + (d.weight ?? 0.5) * 2)
+        .attr('marker-end', d => `url(#arrow-${d.type})`);
+
+      // Node groups
+      const node = svg.append('g').selectAll('g')
+        .data(d3Nodes).enter().append('g')
+        .call(d3.drag()
+          .on('start', (event, d) => { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+          .on('drag',  (event, d) => { d.fx = event.x; d.fy = event.y; })
+          .on('end',   (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+        );
+
+      // Circles
+      node.append('circle')
+        .attr('class', 'node-circle')
+        .attr('r', d => d.isCenter ? 30 : 22)
+        .attr('fill', d => {
+          const s = d.trust_score ?? 0.5;
+          return trustColor(s) + '33';
+        })
+        .attr('stroke', d => trustColor(d.trust_score ?? 0.5))
+        .attr('stroke-width', d => d.isCenter ? 2.5 : 1.5);
+
+      // Icons
+      node.append('text')
+        .attr('class', 'node-icon')
+        .attr('dy', '-4')
+        .text(d => d.icon || '🔵');
+
+      // Score text
+      node.append('text')
+        .attr('class', 'node-score')
+        .attr('dy', '14')
+        .text(d => d.isCenter ? '' : `${Math.round((d.trust_score ?? 0.5) * 100)}%`);
+
+      // Label below
+      node.append('text')
+        .attr('class', 'node-label')
+        .attr('dy', d => d.isCenter ? 46 : 38)
+        .text(d => d.label);
+
+      // Tooltip
+      const tooltip = document.getElementById('graph-tooltip');
+      node
+        .on('mouseover', (event, d) => {
+          if (d.isCenter) return;
+          const pct  = Math.round((d.trust_score ?? 0.5) * 100);
+          const conf = Math.round((d.confidence ?? 0.5) * 100);
+          const sigs = (d.signals || []).slice(0, 3).map(s => `<li>• ${s}</li>`).join('');
+          tooltip.innerHTML = `
+            <div style="color:${trustColor(d.trust_score ?? 0.5)};font-weight:700;margin-bottom:4px">
+              ${d.icon} ${d.label} — ${pct}%
+            </div>
+            <div style="color:#9ca3af;font-size:11px;margin-bottom:6px">Confidence: ${conf}%</div>
+            <ul style="color:#d1d5db;font-size:11px;line-height:1.6">${sigs || '<li>No signals</li>'}</ul>
+          `;
+          tooltip.style.opacity = '1';
+          tooltip.style.left = (event.pageX + 12) + 'px';
+          tooltip.style.top  = (event.pageY - 10) + 'px';
+        })
+        .on('mousemove', event => {
+          tooltip.style.left = (event.pageX + 12) + 'px';
+          tooltip.style.top  = (event.pageY - 10) + 'px';
+        })
+        .on('mouseout', () => { tooltip.style.opacity = '0'; });
+
+      // Tick
+      sim.on('tick', () => {
+        link
+          .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+          .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        node.attr('transform', d => `translate(${d.x},${d.y})`);
+      });
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    function showLoading(on) {
+      const el = document.getElementById('loading');
+      el.classList.toggle('hidden', !on);
+      el.classList.toggle('flex', on);
+      document.getElementById('analyze-btn').disabled = on;
+      document.getElementById('analyze-btn').classList.toggle('opacity-50', on);
+    }
+
+    function hideResults() {
+      document.getElementById('results').classList.add('hidden');
+    }
+
+    function showError(msg) {
+      document.getElementById('error-text').textContent = msg;
+      document.getElementById('error-banner').classList.remove('hidden');
+    }
+
+    function hideError() {
+      document.getElementById('error-banner').classList.add('hidden');
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────────────
+    checkHealth();
+    setInterval(checkHealth, 30_000);
+  </script>
+</body>
+</html>

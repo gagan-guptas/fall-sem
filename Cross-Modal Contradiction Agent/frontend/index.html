@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent 2 — Cross-Modal Contradiction</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --accent: #f59e0b;
+      --accent-dark: #d97706;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    @keyframes fillBar {
+      from { width: 0%; }
+    }
+    @keyframes scoreReveal {
+      from { opacity: 0; transform: scale(0.85); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    .fade-up     { animation: fadeUp 0.35s ease both; }
+    .spinner     { animation: spin 0.8s linear infinite; }
+    .dot-pulse   { animation: pulse-dot 1.2s ease-in-out infinite; }
+    .score-reveal { animation: scoreReveal 0.4s cubic-bezier(0.34,1.56,0.64,1) both; }
+
+    .score-bar {
+      transition: width 0.9s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    textarea:focus, input:focus { outline: none; }
+
+    /* Radial score ring */
+    .ring-svg { transform: rotate(-90deg); }
+    .ring-track { fill: none; stroke: #1f2937; stroke-width: 8; }
+    .ring-fill  { fill: none; stroke-width: 8; stroke-linecap: round;
+                  transition: stroke-dashoffset 1s cubic-bezier(0.4,0,0.2,1); }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+
+    .arch-card { background: linear-gradient(135deg, #1a1f2e 0%, #111827 100%); }
+    .verdict-chip {
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans antialiased">
+
+  <!-- ── Header ──────────────────────────────────────────────────────────────── -->
+  <header class="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-20">
+    <div class="max-w-5xl mx-auto px-6 py-4 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white font-bold text-sm">A2</div>
+      <div>
+        <span class="font-semibold text-white">Cross-Modal Contradiction Agent</span>
+        <span class="ml-2 text-xs text-gray-500 font-mono">Agent 2 · Data Deception Pipeline</span>
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <span id="status-dot" class="w-2 h-2 rounded-full bg-gray-600"></span>
+        <span id="status-text" class="text-xs text-gray-500">checking…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main ────────────────────────────────────────────────────────────────── -->
+  <main class="max-w-5xl mx-auto px-6 py-10 space-y-8">
+
+    <!-- Hero -->
+    <div class="fade-up">
+      <h1 class="text-3xl font-bold text-white">Detect image–text contradiction in news</h1>
+      <p class="mt-2 text-gray-400 max-w-2xl">
+        Provide an image URL (or description) alongside a news headline.
+        The agent scores <span class="text-amber-400 font-medium">semantic alignment</span> and
+        <span class="text-red-400 font-medium">contradiction</span> between the two modalities.
+      </p>
+    </div>
+
+    <!-- Architecture card -->
+    <div class="fade-up arch-card border border-gray-800 rounded-2xl p-5" style="animation-delay:0.04s">
+      <div class="flex items-center gap-2 mb-4">
+        <svg class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+        </svg>
+        <span class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Research Architecture · CMSAN</span>
+        <span class="ml-auto text-xs text-gray-600 italic">Demo powered by Gemini vision</span>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+        <div class="bg-gray-900/60 border border-blue-900/50 rounded-xl p-3 text-center">
+          <div class="text-blue-400 font-semibold mb-1">Text Encoder</div>
+          <div class="text-gray-300 font-mono">DeBERTa-v3</div>
+        </div>
+        <div class="bg-gray-900/60 border border-purple-900/50 rounded-xl p-3 text-center">
+          <div class="text-purple-400 font-semibold mb-1">Image Encoder</div>
+          <div class="text-gray-300 font-mono">CLIP ViT-Large</div>
+        </div>
+        <div class="bg-gray-900/60 border border-amber-900/50 rounded-xl p-3 text-center">
+          <div class="text-amber-400 font-semibold mb-1">Fusion</div>
+          <div class="text-gray-300 font-mono">Cross-Attn. TF</div>
+        </div>
+        <div class="bg-gray-900/60 border border-emerald-900/50 rounded-xl p-3 text-center">
+          <div class="text-emerald-400 font-semibold mb-1">Output</div>
+          <div class="text-gray-300 font-mono">Alignment · Contradiction</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input card -->
+    <div class="fade-up bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5" style="animation-delay:0.08s">
+
+      <!-- Image input section -->
+      <div class="space-y-3">
+        <label class="text-sm font-medium text-gray-300 flex items-center gap-2">
+          <svg class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+          </svg>
+          Image
+        </label>
+
+        <!-- Image tabs -->
+        <div class="flex gap-1 bg-gray-800 rounded-lg p-1 w-fit">
+          <button id="tab-img-url" onclick="switchImageTab('url')"
+            class="img-tab px-3 py-1.5 rounded-md text-xs font-medium transition-all bg-amber-600 text-white">
+            Image URL
+          </button>
+          <button id="tab-img-desc" onclick="switchImageTab('desc')"
+            class="img-tab px-3 py-1.5 rounded-md text-xs font-medium transition-all text-gray-400 hover:text-white">
+            Describe Image
+          </button>
+        </div>
+
+        <div id="img-url-input">
+          <input id="image-url" type="url"
+            placeholder="https://example.com/flood-photo.jpg"
+            class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-600 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 transition" />
+          <p class="mt-1.5 text-xs text-gray-600">Image is fetched via the backend and sent to Gemini vision. Falls back to description mode if unreachable.</p>
+        </div>
+
+        <div id="img-desc-input" class="hidden">
+          <textarea id="image-description" rows="3"
+            placeholder="e.g. Aerial view of flooded streets and submerged buildings in a coastal Indian city…"
+            class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-600 resize-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 transition"></textarea>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div class="border-t border-gray-800"></div>
+
+      <!-- Text input section -->
+      <div class="space-y-3">
+        <label class="text-sm font-medium text-gray-300 flex items-center gap-2">
+          <svg class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          News Headline / Text
+        </label>
+        <textarea id="news-text" rows="3"
+          placeholder="e.g. Mumbai flood today — thousands displaced as city battles record rainfall"
+          class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-600 resize-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 transition"></textarea>
+      </div>
+
+      <!-- Actions row -->
+      <div class="flex items-center gap-3">
+        <button id="analyze-btn" onclick="runAnalysis()"
+          class="flex-1 py-3 bg-amber-600 hover:bg-amber-500 active:scale-[0.98] rounded-xl text-sm font-semibold text-white transition-all flex items-center justify-center gap-2">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          Analyze Contradiction
+        </button>
+        <button onclick="loadExample()"
+          class="px-4 py-3 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm text-gray-300 hover:text-white transition-all font-medium whitespace-nowrap">
+          Load Example ↗
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading state -->
+    <div id="loading" class="hidden flex-col items-center justify-center py-16 gap-4">
+      <svg class="spinner w-10 h-10 text-amber-500" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+      </svg>
+      <div class="text-center">
+        <p id="loading-msg" class="text-white font-medium">Analyzing cross-modal alignment…</p>
+        <p class="text-sm text-gray-500 mt-1">Agent 2 is comparing image content against news text</p>
+      </div>
+    </div>
+
+    <!-- Error banner -->
+    <div id="error-banner" class="hidden bg-red-950 border border-red-800 rounded-xl px-5 py-4 text-sm text-red-300 flex gap-3 items-start">
+      <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <span id="error-text"></span>
+    </div>
+
+    <!-- Results -->
+    <div id="results" class="hidden space-y-6">
+
+      <!-- Verdict banner -->
+      <div id="verdict-banner" class="fade-up rounded-2xl border px-6 py-5 flex items-center gap-4">
+        <div id="verdict-icon" class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl"></div>
+        <div class="flex-1">
+          <div class="flex items-center gap-3 flex-wrap">
+            <span id="verdict-label" class="verdict-chip px-3 py-1 rounded-full border"></span>
+            <span id="verdict-confidence" class="text-xs text-gray-500 font-mono"></span>
+          </div>
+          <p id="mismatch-reason" class="mt-1 text-sm text-gray-300 leading-relaxed"></p>
+        </div>
+      </div>
+
+      <!-- Score rings row -->
+      <div class="fade-up grid grid-cols-2 gap-4" style="animation-delay:0.06s">
+
+        <!-- Alignment score -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col items-center gap-4">
+          <div class="text-sm font-medium text-gray-400">Semantic Alignment</div>
+          <div class="relative w-32 h-32">
+            <svg class="ring-svg w-full h-full" viewBox="0 0 100 100">
+              <circle class="ring-track" cx="50" cy="50" r="42"/>
+              <circle id="align-ring" class="ring-fill" cx="50" cy="50" r="42"
+                stroke="#10b981" stroke-dasharray="264" stroke-dashoffset="264"/>
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center">
+              <span id="align-score-text" class="text-3xl font-bold text-emerald-400">—</span>
+              <span class="text-xs text-gray-600 mt-0.5">/ 1.00</span>
+            </div>
+          </div>
+          <div class="w-full space-y-1.5">
+            <div class="flex justify-between text-xs text-gray-600">
+              <span>0 · unrelated</span><span>1 · identical</span>
+            </div>
+            <div class="bg-gray-800 rounded-full h-2 overflow-hidden">
+              <div id="align-bar" class="score-bar h-full rounded-full bg-emerald-500" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contradiction score -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col items-center gap-4">
+          <div class="text-sm font-medium text-gray-400">Contradiction Score</div>
+          <div class="relative w-32 h-32">
+            <svg class="ring-svg w-full h-full" viewBox="0 0 100 100">
+              <circle class="ring-track" cx="50" cy="50" r="42"/>
+              <circle id="contra-ring" class="ring-fill" cx="50" cy="50" r="42"
+                stroke="#ef4444" stroke-dasharray="264" stroke-dashoffset="264"/>
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center">
+              <span id="contra-score-text" class="text-3xl font-bold text-red-400">—</span>
+              <span class="text-xs text-gray-600 mt-0.5">/ 1.00</span>
+            </div>
+          </div>
+          <div class="w-full space-y-1.5">
+            <div class="flex justify-between text-xs text-gray-600">
+              <span>0 · no conflict</span><span>1 · direct conflict</span>
+            </div>
+            <div class="bg-gray-800 rounded-full h-2 overflow-hidden">
+              <div id="contra-bar" class="score-bar h-full rounded-full bg-red-500" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Analysis breakdown -->
+      <div class="fade-up grid grid-cols-1 md:grid-cols-2 gap-4" style="animation-delay:0.1s">
+
+        <!-- Image understanding -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-2">
+          <div class="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            Image Content
+          </div>
+          <p id="image-desc-output" class="text-sm text-gray-300 leading-relaxed">—</p>
+          <div id="image-mode-badge" class="hidden">
+            <span class="text-xs font-mono px-2 py-0.5 rounded bg-gray-800 text-gray-500"></span>
+          </div>
+        </div>
+
+        <!-- Text summary -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-2">
+          <div class="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            Text Claim
+          </div>
+          <p id="text-summary-output" class="text-sm text-gray-300 leading-relaxed">—</p>
+        </div>
+      </div>
+
+      <!-- Research gap note -->
+      <div class="fade-up bg-gray-900/60 border border-amber-900/30 rounded-xl px-5 py-4 flex gap-3" style="animation-delay:0.14s">
+        <svg class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <div class="text-xs text-gray-500">
+          <span class="text-amber-400 font-semibold">Research gap addressed:</span>
+          Few existing systems explicitly model cross-modal contradiction. Most pipelines treat
+          text and image classifiers independently — CMSAN instead builds a cross-attention
+          bridge to capture semantic misalignment as a first-class signal.
+        </div>
+      </div>
+
+      <!-- JSON output -->
+      <details class="fade-up bg-gray-900 border border-gray-800 rounded-xl overflow-hidden" style="animation-delay:0.16s">
+        <summary class="px-5 py-3 text-sm text-gray-400 cursor-pointer hover:text-white transition select-none">
+          📋 View raw JSON output (chainable to next agent)
+        </summary>
+        <pre id="json-output" class="px-5 pb-5 text-xs text-green-400 font-mono overflow-x-auto leading-relaxed"></pre>
+      </details>
+
+    </div>
+
+  </main>
+
+  <!-- ── Script ─────────────────────────────────────────────────────────────── -->
+  <script>
+    const API = 'http://localhost:8001';
+
+    // ── Health ─────────────────────────────────────────────────────────────────
+    async function checkHealth() {
+      try {
+        const r = await fetch(`${API}/health`);
+        if (r.ok) {
+          document.getElementById('status-dot').className  = 'w-2 h-2 rounded-full bg-emerald-500 dot-pulse';
+          document.getElementById('status-text').textContent = 'backend online';
+        } else { throw new Error(); }
+      } catch {
+        document.getElementById('status-dot').className  = 'w-2 h-2 rounded-full bg-red-500';
+        document.getElementById('status-text').textContent = 'backend offline';
+      }
+    }
+
+    // ── Image tab toggle ───────────────────────────────────────────────────────
+    function switchImageTab(tab) {
+      const isUrl = tab === 'url';
+      document.getElementById('img-url-input').classList.toggle('hidden', !isUrl);
+      document.getElementById('img-desc-input').classList.toggle('hidden', isUrl);
+      document.getElementById('tab-img-url').className  = `img-tab px-3 py-1.5 rounded-md text-xs font-medium transition-all ${isUrl ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-white'}`;
+      document.getElementById('tab-img-desc').className = `img-tab px-3 py-1.5 rounded-md text-xs font-medium transition-all ${!isUrl ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-white'}`;
+    }
+
+    // ── Example (Chennai image / Mumbai text) ──────────────────────────────────
+    function loadExample() {
+      // Use Wikimedia Commons public domain flood image as example
+      document.getElementById('image-url').value = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Camponotus_flavomarginatus_ant.jpg/320px-Camponotus_flavomarginatus_ant.jpg';
+      document.getElementById('news-text').value = 'Mumbai flood today — thousands displaced as city battles record rainfall from monsoon';
+      switchImageTab('url');
+
+      // Override with a more relevant example description instead
+      document.getElementById('image-description').value = 'Aerial photograph showing flooded streets and partially submerged buildings in Chennai, India, with brown water covering roads and vehicles stranded';
+      // Switch to description for a cleaner demo since we can't guarantee external image availability
+      switchImageTab('desc');
+      document.getElementById('news-text').value = 'Mumbai flood today — thousands displaced as city battles record rainfall';
+    }
+
+    // ── Analyze ────────────────────────────────────────────────────────────────
+    async function runAnalysis() {
+      const imageUrl  = document.getElementById('image-url').value.trim();
+      const imageDesc = document.getElementById('image-description').value.trim();
+      const newsText  = document.getElementById('news-text').value.trim();
+      const urlHidden = document.getElementById('img-url-input').classList.contains('hidden');
+
+      const usingDesc = urlHidden;
+      const activeImg = usingDesc ? imageDesc : imageUrl;
+
+      if (!activeImg) {
+        showError(usingDesc ? 'Please describe the image.' : 'Please enter an image URL.');
+        return;
+      }
+      if (!newsText) { showError('Please enter the news headline or text.'); return; }
+
+      hideError();
+      showLoading(true);
+      hideResults();
+
+      const payload = { text: newsText };
+      if (usingDesc) {
+        payload.image_description = activeImg;
+      } else {
+        payload.image_url = activeImg;
+      }
+
+      try {
+        const res  = await fetch(`${API}/analyze`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(payload),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          showError(data.detail || `HTTP ${res.status}`);
+          showLoading(false);
+          return;
+        }
+
+        renderResults(data);
+      } catch (err) {
+        showError(`Network error: ${err.message}. Is the backend running on port 8001?`);
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // ── Render results ─────────────────────────────────────────────────────────
+    function renderResults(data) {
+      const {
+        alignment_score    = 0,
+        contradiction_score = 0,
+        image_description   = '—',
+        text_summary        = '—',
+        mismatch_reason     = 'None',
+        verdict             = 'UNRELATED',
+        confidence          = 0,
+        image_mode          = '',
+      } = data;
+
+      // Scores
+      const alignPct  = Math.round(alignment_score * 100);
+      const contraPct = Math.round(contradiction_score * 100);
+
+      document.getElementById('align-score-text').textContent  = alignment_score.toFixed(2);
+      document.getElementById('contra-score-text').textContent = contradiction_score.toFixed(2);
+
+      // Animated bars
+      setTimeout(() => {
+        document.getElementById('align-bar').style.width  = `${alignPct}%`;
+        document.getElementById('contra-bar').style.width = `${contraPct}%`;
+        // SVG rings: circumference = 2π×42 ≈ 264
+        const C = 264;
+        document.getElementById('align-ring').style.strokeDashoffset  = C - (C * alignment_score);
+        document.getElementById('contra-ring').style.strokeDashoffset = C - (C * contradiction_score);
+      }, 80);
+
+      // Verdict banner
+      const VERDICT_MAP = {
+        ALIGNED:      { bg: 'bg-emerald-950 border-emerald-800', chip: 'bg-emerald-900 text-emerald-300 border-emerald-700', icon: '✅' },
+        MISMATCHED:   { bg: 'bg-amber-950  border-amber-800',   chip: 'bg-amber-900  text-amber-300  border-amber-700',    icon: '⚠️' },
+        CONTRADICTED: { bg: 'bg-red-950    border-red-800',     chip: 'bg-red-900    text-red-300    border-red-700',      icon: '❌' },
+        UNRELATED:    { bg: 'bg-gray-900   border-gray-700',    chip: 'bg-gray-800   text-gray-300   border-gray-600',     icon: '🔲' },
+      };
+      const vm = VERDICT_MAP[verdict] || VERDICT_MAP.UNRELATED;
+
+      const banner = document.getElementById('verdict-banner');
+      banner.className = `fade-up rounded-2xl border px-6 py-5 flex items-center gap-4 ${vm.bg}`;
+
+      document.getElementById('verdict-icon').textContent  = vm.icon;
+      document.getElementById('verdict-label').className   = `verdict-chip px-3 py-1 rounded-full border ${vm.chip}`;
+      document.getElementById('verdict-label').textContent = verdict;
+      document.getElementById('verdict-confidence').textContent = `confidence ${(confidence * 100).toFixed(0)}%`;
+      document.getElementById('mismatch-reason').textContent   = mismatch_reason !== 'None' ? mismatch_reason : '';
+
+      // Breakdown
+      document.getElementById('image-desc-output').textContent   = image_description;
+      document.getElementById('text-summary-output').textContent = text_summary;
+
+      if (image_mode) {
+        const badge = document.getElementById('image-mode-badge');
+        badge.classList.remove('hidden');
+        badge.querySelector('span').textContent = `mode: ${image_mode}`;
+      }
+
+      // JSON
+      document.getElementById('json-output').textContent = JSON.stringify(data, null, 2);
+
+      document.getElementById('results').classList.remove('hidden');
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    function showLoading(on) {
+      const el = document.getElementById('loading');
+      el.classList.toggle('hidden', !on);
+      el.classList.toggle('flex', on);
+      document.getElementById('analyze-btn').disabled = on;
+      document.getElementById('analyze-btn').classList.toggle('opacity-50', on);
+    }
+
+    function hideResults() { document.getElementById('results').classList.add('hidden'); }
+
+    function showError(msg) {
+      document.getElementById('error-text').textContent = msg;
+      document.getElementById('error-banner').classList.remove('hidden');
+    }
+
+    function hideError() {
+      document.getElementById('error-banner').classList.add('hidden');
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────────────
+    checkHealth();
+    setInterval(checkHealth, 30000);
+  </script>
+</body>
+</html>
