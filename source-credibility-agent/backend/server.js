@@ -9,7 +9,6 @@ const https     = require('https');
 const url       = require('url');
 const fs        = require('fs');
 const path      = require('path');
-const { spawn } = require('child_process');
 
 // ── Load .env ──────────────────────────────────────────────────────────────────
 const envPath = path.join(__dirname, '.env');
@@ -85,39 +84,43 @@ function httpsPost(targetUrl, headers, body) {
   });
 }
 
-function detectProxy() {
-  const envProxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY ||
-                   process.env.https_proxy || process.env.http_proxy;
-  if (envProxy) return envProxy;
-  try {
-    const { execSync } = require('child_process');
-    const out  = execSync('scutil --proxy', { encoding: 'utf8', timeout: 3000 });
-    const host = out.match(/HTTPSProxy\s*:\s*(\S+)/)?.[1];
-    const port = out.match(/HTTPSPort\s*:\s*(\S+)/)?.[1];
-    if (host && port) return `http://${host}:${port}`;
-    const host2 = out.match(/HTTPProxy\s*:\s*(\S+)/)?.[1];
-    const port2 = out.match(/HTTPPort\s*:\s*(\S+)/)?.[1];
-    if (host2 && port2) return `http://${host2}:${port2}`;
-  } catch (_) {}
-  return 'http://proxy-intlho.wal-mart.com:8080';
-}
+// ── Fetch a page via built-in https/http, no shell-out, no proxy config ────────
+// Same approach as Agent 1's httpsGet: native Node request, follows redirects.
 
-function fetchWithCurl(targetUrl) {
+function fetchUrlText(targetUrl, redirectsLeft = 5) {
   return new Promise((resolve, reject) => {
-    const safeUrl  = targetUrl.replace(/'/g, "'\\''");
-    const proxy    = detectProxy();
-    const proxyFlag = proxy ? `-x '${proxy}'` : '';
-    const cmd      = `/usr/bin/curl -sL --max-time 15 -A 'CredibilityAgent/1.0' ${proxyFlag} '${safeUrl}'`;
-    console.log(`[fetch] proxy=${proxy || 'none'} url=${targetUrl}`);
-    const child  = spawn('/bin/sh', ['-c', cmd]);
-    let stdout = '', stderr = '';
-    child.stdout.on('data', d => (stdout += d));
-    child.stderr.on('data', d => (stderr += d));
-    child.on('close', code => {
-      if (code !== 0) return reject(new Error(`curl exited ${code}: ${stderr.slice(0, 200)}`));
-      resolve(stdout);
+    let parsed;
+    try {
+      parsed = new URL(targetUrl);
+    } catch (e) {
+      return reject(new Error(`Invalid URL: ${targetUrl}`));
+    }
+
+    const client = parsed.protocol === 'http:' ? http : https;
+    const options = {
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'http:' ? 80 : 443),
+      path: parsed.pathname + (parsed.search || ''),
+      method: 'GET',
+      headers: { 'User-Agent': 'CredibilityAgent/1.0' },
+    };
+
+    const req = client.request(options, res => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        if (redirectsLeft <= 0) return reject(new Error('Too many redirects'));
+        const nextUrl = new URL(res.headers.location, targetUrl).toString();
+        return fetchUrlText(nextUrl, redirectsLeft - 1).then(resolve).catch(reject);
+      }
+
+      let data = '';
+      res.on('data', c => (data += c));
+      res.on('end', () => resolve(data));
     });
-    child.on('error', err => reject(err));
+
+    req.setTimeout(15000, () => req.destroy(new Error('Request timed out')));
+    req.on('error', reject);
+    req.end();
   });
 }
 
@@ -293,7 +296,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await readBody(req);
       if (!body.url) return sendJSON(res, 400, { detail: "Provide 'url'." });
-      const html = await fetchWithCurl(body.url);
+      const html = await fetchUrlText(body.url);
       const text = stripHtml(html);
       if (!text) return sendJSON(res, 502, { detail: 'Page returned empty content.' });
       return sendJSON(res, 200, { text, char_count: text.length });
@@ -323,7 +326,7 @@ const server = http.createServer(async (req, res) => {
         }
         if (!context) {
           try {
-            const html = await fetchWithCurl(targetUrl);
+            const html = await fetchUrlText(targetUrl);
             context = stripHtml(html).slice(0, 4000);
           } catch (e) {
             console.warn('[fetch] could not fetch URL, continuing without context:', e.message);
