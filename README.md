@@ -1,5 +1,3 @@
-Here is the **fixed and updated README**, with the **Consensus Engine added last**. I also corrected the commands by removing `node server.js` after `start.sh`, because `start.sh` already starts the backend.
-
 ````markdown
 # Data Deception Agents – Setup & Run Guide
 
