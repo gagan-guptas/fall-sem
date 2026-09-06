@@ -15,7 +15,6 @@ const https     = require('https');
 const url       = require('url');
 const fs        = require('fs');
 const path      = require('path');
-const { spawn, execSync } = require('child_process');
 
 // ── Load .env ──────────────────────────────────────────────────────────────────
 const envPath = path.join(__dirname, '.env');
@@ -91,57 +90,67 @@ function httpsPost(targetUrl, headers, body) {
   });
 }
 
-// ── Proxy detection (same as Agent 1) ─────────────────────────────────────────
+// ── Fetch image bytes via built-in https/http, return {data: base64, mimeType} ─
+// Same approach as Agent 1's httpsGet: native Node request, follows redirects,
+// no shell-out, no curl, no proxy configuration of any kind.
 
-function detectProxy() {
-  const envProxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY ||
-                   process.env.https_proxy || process.env.http_proxy;
-  if (envProxy) return envProxy;
-
-  try {
-    const out = execSync('scutil --proxy', { encoding: 'utf8', timeout: 3000 });
-    const host = out.match(/HTTPSProxy\s*:\s*(\S+)/)?.[1];
-    const port = out.match(/HTTPSPort\s*:\s*(\S+)/)?.[1];
-    if (host && port) return `http://${host}:${port}`;
-    const host2 = out.match(/HTTPProxy\s*:\s*(\S+)/)?.[1];
-    const port2 = out.match(/HTTPPort\s*:\s*(\S+)/)?.[1];
-    if (host2 && port2) return `http://${host2}:${port2}`;
-  } catch (_) {}
-
-  return 'http://proxy-intlho.wal-mart.com:8080';
-}
-
-// ── Fetch image bytes via curl, return {data: base64, mimeType} ────────────────
-
-function fetchImageAsBase64(imageUrl) {
+function fetchImageAsBase64(imageUrl, redirectsLeft = 5) {
   return new Promise((resolve, reject) => {
-    const safeUrl = imageUrl.replace(/'/g, "'\\''");
-    const proxy   = detectProxy();
-    const proxyFlag = proxy ? `-x '${proxy}'` : '';
+    let parsed;
+    try {
+      parsed = new URL(imageUrl);
+    } catch (e) {
+      return reject(new Error(`Invalid image URL: ${imageUrl}`));
+    }
 
-    // -o - streams bytes to stdout; --max-filesize 10MB guard
-    const cmd = `/usr/bin/curl -sL --max-time 20 --max-filesize 10485760 -A 'CMSAN-Agent/1.0' ${proxyFlag} '${safeUrl}'`;
+    const client = parsed.protocol === 'http:' ? http : https;
+    const options = {
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'http:' ? 80 : 443),
+      path: parsed.pathname + (parsed.search || ''),
+      method: 'GET',
+      headers: { 'User-Agent': 'CMSAN-Agent/1.0' },
+    };
 
-    console.log(`[image-fetch] proxy=${proxy || 'none'} url=${imageUrl}`);
+    const req = client.request(options, res => {
+      // Follow redirects
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        if (redirectsLeft <= 0) return reject(new Error('Too many redirects'));
+        const nextUrl = new URL(res.headers.location, imageUrl).toString();
+        return fetchImageAsBase64(nextUrl, redirectsLeft - 1).then(resolve).catch(reject);
+      }
 
-    const child = spawn('/bin/sh', ['-c', cmd]);
-    const chunks = [];
-    let stderr = '';
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`Image fetch returned status ${res.statusCode}`));
+      }
 
-    child.stdout.on('data', d => chunks.push(d));
-    child.stderr.on('data', d => (stderr += d));
+      const chunks = [];
+      let totalBytes = 0;
+      const MAX_BYTES = 10 * 1024 * 1024; // 10MB guard, same limit as before
 
-    child.on('close', code => {
-      if (code !== 0) return reject(new Error(`curl exited ${code}: ${stderr.slice(0, 200)}`));
-      if (!chunks.length) return reject(new Error('Image URL returned empty content'));
+      res.on('data', chunk => {
+        totalBytes += chunk.length;
+        if (totalBytes > MAX_BYTES) {
+          req.destroy(new Error('Image exceeds 10MB size limit'));
+          return;
+        }
+        chunks.push(chunk);
+      });
 
-      const buf      = Buffer.concat(chunks);
-      const data     = buf.toString('base64');
-      const mimeType = guessMimeType(imageUrl, buf);
-      resolve({ data, mimeType });
+      res.on('end', () => {
+        if (!chunks.length) return reject(new Error('Image URL returned empty content'));
+        const buf = Buffer.concat(chunks);
+        const data = buf.toString('base64');
+        const mimeType = guessMimeType(imageUrl, buf);
+        resolve({ data, mimeType });
+      });
     });
 
-    child.on('error', err => reject(err));
+    req.setTimeout(20000, () => req.destroy(new Error('Image fetch timed out')));
+    req.on('error', reject);
+    req.end();
   });
 }
 

@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent 6 — Evidence Retrieval</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --accent: #6366f1;
+      --accent-dark: #4f46e5;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .fade-up    { animation: fadeUp 0.35s ease both; }
+    .spinner    { animation: spin 0.8s linear infinite; }
+    .dot-pulse  { animation: pulse-dot 1.2s ease-in-out infinite; }
+
+    .claim-group  { animation: fadeUp 0.3s ease both; }
+    .evidence-card { animation: fadeUp 0.3s ease both; }
+
+    .type-badge {
+      font-size: 0.65rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .score-bar {
+      transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    textarea:focus, input:focus { outline: none; }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans antialiased">
+
+  <!-- ── Header ─────────────────────────────────────────────────────────────── -->
+  <header class="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-20">
+    <div class="max-w-5xl mx-auto px-6 py-4 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-sm">A6</div>
+      <div>
+        <span class="font-semibold text-white">Evidence Retrieval Agent</span>
+        <span class="ml-2 text-xs text-gray-500 font-mono">Agent 6 · Data Deception Pipeline</span>
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <span id="status-dot" class="w-2 h-2 rounded-full bg-gray-600"></span>
+        <span id="status-text" class="text-xs text-gray-500">checking…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main ───────────────────────────────────────────────────────────────── -->
+  <main class="max-w-5xl mx-auto px-6 py-10 space-y-8">
+
+    <!-- Hero -->
+    <div class="fade-up">
+      <h1 class="text-3xl font-bold text-white">Find evidence for or against a claim</h1>
+      <p class="mt-2 text-gray-400 max-w-xl">
+        Paste one claim, or chain in the JSON output from Agent 1. The agent searches trusted
+        sources for each claim and ranks the results by how strongly they support or contradict it.
+      </p>
+    </div>
+
+    <!-- Input card -->
+    <div class="fade-up bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4" style="animation-delay:0.05s">
+
+      <!-- Tabs -->
+      <div class="flex gap-1 bg-gray-800 rounded-lg p-1 w-fit">
+        <button id="tab-single" onclick="switchTab('single')"
+          class="tab-btn px-4 py-1.5 rounded-md text-sm font-medium transition-all bg-indigo-600 text-white">
+          Single Claim
+        </button>
+        <button id="tab-json" onclick="switchTab('json')"
+          class="tab-btn px-4 py-1.5 rounded-md text-sm font-medium transition-all text-gray-400 hover:text-white">
+          Claims JSON (from Agent 1)
+        </button>
+      </div>
+
+      <!-- Single claim input -->
+      <div id="input-single">
+        <textarea id="claim-text" rows="3"
+          placeholder="Enter a single claim to verify…  e.g. &quot;NASA confirmed extraterrestrial beings landed near New Delhi.&quot;"
+          class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-600 resize-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition"></textarea>
+        <div class="flex justify-between items-center mt-1">
+          <span id="char-count" class="text-xs text-gray-600">0 characters</span>
+          <button onclick="loadExample()" class="text-xs text-indigo-400 hover:text-indigo-300 transition">
+            Load example ↗
+          </button>
+        </div>
+      </div>
+
+      <!-- Claims JSON input -->
+      <div id="input-json" class="hidden">
+        <textarea id="claims-json" rows="8"
+          placeholder='Paste Agent 1 output here, e.g. { "claims": [ { "id": 1, "text": "…", "type": "event_claim" } ] }'
+          class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-xs font-mono text-gray-100 placeholder-gray-600 resize-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition"></textarea>
+        <p class="mt-2 text-xs text-gray-600">Every claim in the array is checked against trusted sources in one pass.</p>
+      </div>
+
+      <!-- Submit -->
+      <button id="retrieve-btn" onclick="retrieveEvidence()"
+        class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] rounded-xl text-sm font-semibold text-white transition-all flex items-center justify-center gap-2">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"/>
+        </svg>
+        Retrieve Evidence
+      </button>
+    </div>
+
+    <!-- Loading state -->
+    <div id="loading" class="hidden flex-col items-center justify-center py-16 gap-4">
+      <svg class="spinner w-10 h-10 text-indigo-500" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+      </svg>
+      <div class="text-center">
+        <p class="text-white font-medium">Searching trusted sources…</p>
+        <p class="text-sm text-gray-500 mt-1">Agent 6 is retrieving and ranking evidence for each claim</p>
+      </div>
+    </div>
+
+    <!-- Error banner -->
+    <div id="error-banner" class="hidden bg-red-950 border border-red-800 rounded-xl px-5 py-4 text-sm text-red-300 flex gap-3 items-start">
+      <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <span id="error-text"></span>
+    </div>
+
+    <!-- Results -->
+    <div id="results" class="hidden space-y-6">
+
+      <!-- Stats bar -->
+      <div id="stats-bar" class="fade-up grid grid-cols-4 gap-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+          <div id="stat-claims" class="text-3xl font-bold text-indigo-400">—</div>
+          <div class="text-xs text-gray-500 mt-1">Claims checked</div>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+          <div id="stat-evidence" class="text-3xl font-bold text-purple-400">—</div>
+          <div class="text-xs text-gray-500 mt-1">Sources found</div>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+          <div id="stat-supporting" class="text-3xl font-bold text-emerald-400">—</div>
+          <div class="text-xs text-gray-500 mt-1">Supporting</div>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+          <div id="stat-contradicting" class="text-3xl font-bold text-red-400">—</div>
+          <div class="text-xs text-gray-500 mt-1">Contradicting</div>
+        </div>
+      </div>
+
+      <!-- Filter chips (by stance) -->
+      <div id="filter-bar" class="fade-up flex flex-wrap gap-2 items-center">
+        <span class="text-xs text-gray-500">Filter evidence:</span>
+        <button onclick="filterStance('all')" data-stance="all"
+          class="filter-chip px-3 py-1 rounded-full text-xs font-medium bg-indigo-600 text-white transition">
+          All
+        </button>
+        <button onclick="filterStance('supporting')" data-stance="supporting"
+          class="filter-chip px-3 py-1 rounded-full text-xs font-medium border bg-emerald-900/60 text-emerald-300 border-emerald-700 opacity-50 hover:opacity-100 transition">
+          Supporting
+        </button>
+        <button onclick="filterStance('contradicting')" data-stance="contradicting"
+          class="filter-chip px-3 py-1 rounded-full text-xs font-medium border bg-red-900/60 text-red-300 border-red-700 opacity-50 hover:opacity-100 transition">
+          Contradicting
+        </button>
+        <button onclick="filterStance('neutral')" data-stance="neutral"
+          class="filter-chip px-3 py-1 rounded-full text-xs font-medium border bg-gray-800 text-gray-300 border-gray-700 opacity-50 hover:opacity-100 transition">
+          Neutral
+        </button>
+      </div>
+
+      <!-- Claim groups (each with its own evidence list) -->
+      <div id="claim-groups" class="space-y-8"></div>
+
+      <!-- JSON export -->
+      <details class="fade-up bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <summary class="px-5 py-3 text-sm text-gray-400 cursor-pointer hover:text-white transition select-none">
+          📋 View raw JSON output (chainable to next agent)
+        </summary>
+        <pre id="json-output" class="px-5 pb-5 text-xs text-green-400 font-mono overflow-x-auto leading-relaxed"></pre>
+      </details>
+    </div>
+
+  </main>
+
+  <!-- ── Script ──────────────────────────────────────────────────────────────── -->
+  <script>
+    const API = 'http://localhost:8005';
+    let currentData = null;
+    let activeStance = 'all';
+
+    const STANCE_CONFIG = {
+      supporting:    { color: 'bg-emerald-900/60 text-emerald-300 border-emerald-700', bar: 'bg-emerald-500', label: 'Supporting' },
+      contradicting: { color: 'bg-red-900/60 text-red-300 border-red-700',             bar: 'bg-red-500',     label: 'Contradicting' },
+      neutral:       { color: 'bg-gray-800 text-gray-300 border-gray-700',             bar: 'bg-gray-500',    label: 'Neutral' },
+    };
+
+    function getStanceConfig(stance) {
+      return STANCE_CONFIG[stance] || STANCE_CONFIG.neutral;
+    }
+
+    // ── Health check ───────────────────────────────────────────────────────────
+    async function checkHealth() {
+      try {
+        const r = await fetch(`${API}/health`);
+        if (r.ok) {
+          document.getElementById('status-dot').className = 'w-2 h-2 rounded-full bg-emerald-500 dot-pulse';
+          document.getElementById('status-text').textContent = 'backend online';
+        } else { throw new Error(); }
+      } catch {
+        document.getElementById('status-dot').className = 'w-2 h-2 rounded-full bg-red-500';
+        document.getElementById('status-text').textContent = 'backend offline';
+      }
+    }
+
+    // ── Tabs ───────────────────────────────────────────────────────────────────
+    function switchTab(tab) {
+      const isSingle = tab === 'single';
+      document.getElementById('input-single').classList.toggle('hidden', !isSingle);
+      document.getElementById('input-json').classList.toggle('hidden', isSingle);
+      document.getElementById('tab-single').className = `tab-btn px-4 py-1.5 rounded-md text-sm font-medium transition-all ${isSingle ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`;
+      document.getElementById('tab-json').className   = `tab-btn px-4 py-1.5 rounded-md text-sm font-medium transition-all ${!isSingle ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`;
+    }
+
+    // ── Char counter ───────────────────────────────────────────────────────────
+    document.getElementById('claim-text').addEventListener('input', function() {
+      document.getElementById('char-count').textContent = `${this.value.length} characters`;
+    });
+
+    // ── Example ───────────────────────────────────────────────────────────────
+    function loadExample() {
+      const ex = 'NASA confirmed that extraterrestrial beings landed near New Delhi, India last Tuesday.';
+      const ta = document.getElementById('claim-text');
+      ta.value = ex;
+      document.getElementById('char-count').textContent = `${ex.length} characters`;
+      switchTab('single');
+    }
+
+    // ── Build the claims array to send, from whichever tab is active ───────────
+    function collectClaims() {
+      const jsonVisible = !document.getElementById('input-json').classList.contains('hidden');
+
+      if (jsonVisible) {
+        const raw = document.getElementById('claims-json').value.trim();
+        if (!raw) throw new Error('Paste the claims JSON from Agent 1 first.');
+        let parsed;
+        try {
+          parsed = JSON.parse(raw);
+        } catch (e) {
+          throw new Error('That doesn\'t look like valid JSON.');
+        }
+        const claims = Array.isArray(parsed) ? parsed : parsed.claims;
+        if (!claims || !claims.length) throw new Error('No claims found in that JSON.');
+        return claims.map((c, i) => ({ id: c.id ?? i + 1, text: c.text || c, type: c.type || 'attribute_claim' }));
+      } else {
+        const text = document.getElementById('claim-text').value.trim();
+        if (!text) throw new Error('Please enter a claim.');
+        return [{ id: 1, text, type: 'attribute_claim' }];
+      }
+    }
+
+    // ── Retrieve ───────────────────────────────────────────────────────────────
+    async function retrieveEvidence() {
+      let claims;
+      try {
+        claims = collectClaims();
+      } catch (err) {
+        showError(err.message);
+        return;
+      }
+
+      hideError();
+      showLoading(true);
+      hideResults();
+
+      try {
+        const res = await fetch(`${API}/retrieve-evidence`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ claims }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          showError(data.detail || `HTTP ${res.status}`);
+          showLoading(false);
+          return;
+        }
+
+        currentData = data;
+        renderResults(data);
+      } catch (err) {
+        showError(`Network error: ${err.message}. Is the backend running on port 8005?`);
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // ── Render ─────────────────────────────────────────────────────────────────
+    function renderResults(data) {
+      const { results } = data;
+      if (!results || !results.length) { showError('No results returned.'); return; }
+
+      const allEvidence = results.flatMap(r => r.evidence || []);
+      const supporting = allEvidence.filter(e => e.stance === 'supporting').length;
+      const contradicting = allEvidence.filter(e => e.stance === 'contradicting').length;
+
+      document.getElementById('stat-claims').textContent = results.length;
+      document.getElementById('stat-evidence').textContent = allEvidence.length;
+      document.getElementById('stat-supporting').textContent = supporting;
+      document.getElementById('stat-contradicting').textContent = contradicting;
+
+      renderClaimGroups(results, 'all');
+
+      document.getElementById('json-output').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('results').classList.remove('hidden');
+    }
+
+    function filterStance(stance) {
+      activeStance = stance;
+      document.querySelectorAll('.filter-chip').forEach(btn => {
+        const isActive = btn.dataset.stance === stance;
+        if (btn.dataset.stance === 'all') {
+          btn.className = `filter-chip px-3 py-1 rounded-full text-xs font-medium transition ${isActive ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`;
+        } else {
+          const cfg = getStanceConfig(btn.dataset.stance);
+          btn.className = `filter-chip px-3 py-1 rounded-full text-xs font-medium border transition ${isActive ? cfg.color + ' ring-2 ring-white/20' : cfg.color + ' opacity-50 hover:opacity-100'}`;
+        }
+      });
+      if (currentData) renderClaimGroups(currentData.results, stance);
+    }
+
+    function renderClaimGroups(results, stanceFilter) {
+      const container = document.getElementById('claim-groups');
+      container.innerHTML = '';
+
+      results.forEach((result, gi) => {
+        const evidence = stanceFilter === 'all'
+          ? (result.evidence || [])
+          : (result.evidence || []).filter(e => e.stance === stanceFilter);
+
+        const group = document.createElement('div');
+        group.className = 'claim-group';
+        group.style.animationDelay = `${gi * 0.05}s`;
+
+        const claimHeader = `
+          <div class="flex items-start gap-3 mb-3">
+            <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center text-xs font-mono text-gray-400 font-bold">
+              ${result.claim_id ?? gi + 1}
+            </div>
+            <p class="text-gray-100 text-sm font-medium leading-relaxed pt-1">${escapeHtml(result.claim_text || result.claim || '')}</p>
+          </div>`;
+
+        const cardsHtml = evidence.length
+          ? evidence.map((ev, i) => evidenceCardHtml(ev, i)).join('')
+          : `<div class="text-center text-gray-600 py-6 text-sm border border-dashed border-gray-800 rounded-xl">No ${stanceFilter === 'all' ? '' : stanceFilter + ' '}evidence found for this claim.</div>`;
+
+        group.innerHTML = claimHeader + `<div class="space-y-3 pl-11">${cardsHtml}</div>`;
+        container.appendChild(group);
+      });
+    }
+
+    function evidenceCardHtml(ev, i) {
+      const cfg = getStanceConfig(ev.stance);
+      const trust = Math.round((ev.trust_score ?? 0) * 100);
+      const relevance = Math.round((ev.relevance_score ?? 0) * 100);
+
+      return `
+        <div class="evidence-card bg-gray-900 border border-gray-800 rounded-xl p-4 hover:border-gray-700 transition" style="animation-delay:${i * 0.04}s">
+          <div class="flex items-start justify-between gap-3 flex-wrap">
+            <div class="flex items-center gap-2">
+              <span class="type-badge px-2 py-0.5 rounded-md border font-semibold ${cfg.color}">${cfg.label}</span>
+              <span class="text-sm text-gray-300 font-medium">${escapeHtml(ev.source || 'Unknown source')}</span>
+            </div>
+            ${ev.url ? `<a href="${escapeAttr(ev.url)}" target="_blank" rel="noopener noreferrer" class="text-xs text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1">
+              Open source
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </a>` : ''}
+          </div>
+          <p class="text-gray-400 text-sm leading-relaxed mt-2">${escapeHtml(ev.snippet || '')}</p>
+          <div class="mt-3 grid grid-cols-2 gap-4">
+            <div>
+              <div class="flex justify-between text-xs text-gray-600 mb-1"><span>Source trust</span><span>${trust}%</span></div>
+              <div class="bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                <div class="score-bar h-full rounded-full bg-indigo-500" style="width:${trust}%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs text-gray-600 mb-1"><span>Relevance</span><span>${relevance}%</span></div>
+              <div class="bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                <div class="score-bar h-full rounded-full ${cfg.bar}" style="width:${relevance}%"></div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    function showLoading(on) {
+      const el = document.getElementById('loading');
+      el.classList.toggle('hidden', !on);
+      el.classList.toggle('flex', on);
+      document.getElementById('retrieve-btn').disabled = on;
+      document.getElementById('retrieve-btn').classList.toggle('opacity-50', on);
+    }
+
+    function hideResults() {
+      document.getElementById('results').classList.add('hidden');
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('error-banner');
+      document.getElementById('error-text').textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    function hideError() {
+      document.getElementById('error-banner').classList.add('hidden');
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function escapeAttr(s) {
+      return String(s).replace(/"/g,'&quot;');
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────────────
+    checkHealth();
+    setInterval(checkHealth, 30000);
+  </script>
+</body>
+</html>
