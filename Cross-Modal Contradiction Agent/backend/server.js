@@ -90,9 +90,9 @@ function httpsPost(targetUrl, headers, body) {
   });
 }
 
-// ── Fetch image bytes via built-in https/http, return {data: base64, mimeType} ─
-// Same approach as Agent 1's httpsGet: native Node request, follows redirects,
-// no shell-out, no curl, no proxy configuration of any kind.
+// ── Fetch image bytes directly (pure Node http/https — no proxy) ───────────────
+
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB guard, same limit as before
 
 function fetchImageAsBase64(imageUrl, redirectsLeft = 5) {
   return new Promise((resolve, reject) => {
@@ -100,7 +100,7 @@ function fetchImageAsBase64(imageUrl, redirectsLeft = 5) {
     try {
       parsed = new URL(imageUrl);
     } catch (e) {
-      return reject(new Error(`Invalid image URL: ${imageUrl}`));
+      return reject(new Error(`Invalid image URL: ${e.message}`));
     }
 
     const client = parsed.protocol === 'http:' ? http : https;
@@ -112,43 +112,43 @@ function fetchImageAsBase64(imageUrl, redirectsLeft = 5) {
       headers: { 'User-Agent': 'CMSAN-Agent/1.0' },
     };
 
+    console.log(`[image-fetch] url=${imageUrl}`);
+
     const req = client.request(options, res => {
-      // Follow redirects
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        res.resume();
+        res.resume(); // drain
         if (redirectsLeft <= 0) return reject(new Error('Too many redirects'));
         const nextUrl = new URL(res.headers.location, imageUrl).toString();
         return fetchImageAsBase64(nextUrl, redirectsLeft - 1).then(resolve).catch(reject);
       }
 
-      if (res.statusCode !== 200) {
+      if (res.statusCode < 200 || res.statusCode >= 300) {
         res.resume();
-        return reject(new Error(`Image fetch returned status ${res.statusCode}`));
+        return reject(new Error(`Image request failed with status ${res.statusCode}`));
       }
 
       const chunks = [];
-      let totalBytes = 0;
-      const MAX_BYTES = 10 * 1024 * 1024; // 10MB guard, same limit as before
+      let total = 0;
 
-      res.on('data', chunk => {
-        totalBytes += chunk.length;
-        if (totalBytes > MAX_BYTES) {
-          req.destroy(new Error('Image exceeds 10MB size limit'));
+      res.on('data', d => {
+        total += d.length;
+        if (total > MAX_IMAGE_BYTES) {
+          req.destroy(new Error('Image exceeds 10MB limit'));
           return;
         }
-        chunks.push(chunk);
+        chunks.push(d);
       });
 
       res.on('end', () => {
         if (!chunks.length) return reject(new Error('Image URL returned empty content'));
-        const buf = Buffer.concat(chunks);
-        const data = buf.toString('base64');
+        const buf      = Buffer.concat(chunks);
+        const data     = buf.toString('base64');
         const mimeType = guessMimeType(imageUrl, buf);
         resolve({ data, mimeType });
       });
     });
 
-    req.setTimeout(20000, () => req.destroy(new Error('Image fetch timed out')));
+    req.setTimeout(20000, () => req.destroy(new Error('Request timed out')));
     req.on('error', reject);
     req.end();
   });

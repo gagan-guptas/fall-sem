@@ -39,6 +39,11 @@ const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL
 
 if (!API_KEY) {
   console.warn('⚠️  GEMINI_API_KEY not set. Add it to backend/.env or export it.');
+} else if (/^(my[\s_-]?key|your[\s_-]?key|api[\s_-]?key|change[\s_-]?me|xxx+)$/i.test(API_KEY.trim())) {
+  // Catches the classic "forgot to swap the placeholder" mistake before it
+  // burns a request on Google's side and comes back as a confusing error.
+  console.warn(`⚠️  GEMINI_API_KEY looks like a placeholder ("${API_KEY}"), not a real key.`);
+  console.warn('    Get a real one at https://aistudio.google.com/apikey and put it in backend/.env');
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -364,7 +369,11 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  sendJSON(res, 404, { detail: 'Not found' });
+  // Unmatched route — log exactly what was requested so a 404 is
+  // diagnosable instead of a mystery (wrong path, wrong method, trailing
+  // slash, stale client, etc.).
+  console.warn(`[404] ${req.method} ${pathname} did not match any route`);
+  sendJSON(res, 404, { detail: `Not found: ${req.method} ${pathname}` });
 });
 
 server.listen(PORT, () => {

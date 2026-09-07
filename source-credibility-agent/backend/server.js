@@ -84,35 +84,34 @@ function httpsPost(targetUrl, headers, body) {
   });
 }
 
-// ── Fetch a page via built-in https/http, no shell-out, no proxy config ────────
-// Same approach as Agent 1's httpsGet: native Node request, follows redirects.
-
-function fetchUrlText(targetUrl, redirectsLeft = 5) {
+// Fetch a URL directly (pure Node http/https — no proxy, no shell)
+function fetchUrl(targetUrl, redirectsLeft = 5) {
   return new Promise((resolve, reject) => {
     let parsed;
     try {
       parsed = new URL(targetUrl);
     } catch (e) {
-      return reject(new Error(`Invalid URL: ${targetUrl}`));
+      return reject(new Error(`Invalid URL: ${e.message}`));
     }
 
     const client = parsed.protocol === 'http:' ? http : https;
     const options = {
       hostname: parsed.hostname,
-      port: parsed.port || (parsed.protocol === 'http:' ? 80 : 443),
-      path: parsed.pathname + (parsed.search || ''),
-      method: 'GET',
-      headers: { 'User-Agent': 'CredibilityAgent/1.0' },
+      port:     parsed.port || (parsed.protocol === 'http:' ? 80 : 443),
+      path:     parsed.pathname + (parsed.search || ''),
+      method:   'GET',
+      headers:  { 'User-Agent': 'CredibilityAgent/1.0' },
     };
+
+    console.log(`[fetch] url=${targetUrl}`);
 
     const req = client.request(options, res => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        res.resume();
+        res.resume(); // drain
         if (redirectsLeft <= 0) return reject(new Error('Too many redirects'));
         const nextUrl = new URL(res.headers.location, targetUrl).toString();
-        return fetchUrlText(nextUrl, redirectsLeft - 1).then(resolve).catch(reject);
+        return fetchUrl(nextUrl, redirectsLeft - 1).then(resolve).catch(reject);
       }
-
       let data = '';
       res.on('data', c => (data += c));
       res.on('end', () => resolve(data));
@@ -291,12 +290,12 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  // Fetch-URL proxy
+  // Fetch-URL (pure Node https/http — no shell, no curl, no proxy)
   if (req.method === 'POST' && pathname === '/fetch-url') {
     try {
       const body = await readBody(req);
       if (!body.url) return sendJSON(res, 400, { detail: "Provide 'url'." });
-      const html = await fetchUrlText(body.url);
+      const html = await fetchUrl(body.url);
       const text = stripHtml(html);
       if (!text) return sendJSON(res, 502, { detail: 'Page returned empty content.' });
       return sendJSON(res, 200, { text, char_count: text.length });
@@ -326,7 +325,7 @@ const server = http.createServer(async (req, res) => {
         }
         if (!context) {
           try {
-            const html = await fetchUrlText(targetUrl);
+            const html = await fetchUrl(targetUrl);
             context = stripHtml(html).slice(0, 4000);
           } catch (e) {
             console.warn('[fetch] could not fetch URL, continuing without context:', e.message);
