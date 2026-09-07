@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Case File — Multi-Agent Deception Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0E1116;
+    --panel:#161B22;
+    --panel-border:#262D38;
+    --panel-border-soft:#1E242D;
+    --paper:#F1ECDD;
+    --paper-line:#D9D0B8;
+    --paper-text:#23262B;
+    --paper-muted:#6B6455;
+    --bone:#E9E5D8;
+    --ink-soft:#8A93A3;
+    --rust:#C1443C;
+    --rust-soft:#3A2320;
+    --amber:#D8A034;
+    --amber-soft:#3A2F16;
+    --verdigris:#4C8C6B;
+    --verdigris-soft:#16332A;
+    --wire:#2C3542;
+    --serif:'IBM Plex Serif', Georgia, serif;
+    --mono:'IBM Plex Mono', 'Courier New', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 85% -10%, #171D28 0%, transparent 60%),
+      var(--ink);
+    color:var(--bone);
+    font-family:var(--mono);
+    font-size:14px;
+    line-height:1.5;
+    min-height:100vh;
+  }
+  a{color:var(--amber);}
+
+  /* ── Top bar ───────────────────────────────────────── */
+  .topbar{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:16px;
+    padding:22px 28px 18px;
+    border-bottom:1px solid var(--panel-border-soft);
+    flex-wrap:wrap;
+  }
+  .topbar .brand{
+    font-family:var(--serif);
+    font-size:22px;
+    font-weight:600;
+    color:var(--bone);
+    letter-spacing:0.2px;
+  }
+  .topbar .brand small{
+    display:block;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--ink-soft);
+    font-weight:400;
+    letter-spacing:0.4px;
+    margin-top:3px;
+  }
+  .conn-toggle{
+    background:none;
+    border:1px solid var(--panel-border);
+    color:var(--ink-soft);
+    font-family:var(--mono);
+    font-size:12px;
+    padding:7px 12px;
+    border-radius:3px;
+    cursor:pointer;
+  }
+  .conn-toggle:hover{border-color:var(--ink-soft); color:var(--bone);}
+
+  .conn-panel{
+    max-width:1400px;
+    margin:0 auto;
+    padding:0 28px;
+    overflow:hidden;
+    max-height:0;
+    transition:max-height .25s ease;
+  }
+  .conn-panel.open{max-height:220px;}
+  .conn-panel-inner{
+    display:flex;
+    gap:18px;
+    flex-wrap:wrap;
+    padding:16px 0 4px;
+    border-bottom:1px solid var(--panel-border-soft);
+  }
+  .conn-field{display:flex; flex-direction:column; gap:4px;}
+  .conn-field label{font-size:11px; color:var(--ink-soft);}
+  .conn-field input{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    color:var(--bone);
+    font-family:var(--mono);
+    font-size:12px;
+    padding:6px 8px;
+    border-radius:3px;
+    width:150px;
+  }
+
+  /* ── Layout ────────────────────────────────────────── */
+  .layout{
+    max-width:1400px;
+    margin:0 auto;
+    display:grid;
+    grid-template-columns:360px 1fr;
+    gap:26px;
+    padding:26px 28px 60px;
+    align-items:start;
+  }
+  @media (max-width:900px){
+    .layout{grid-template-columns:1fr;}
+  }
+
+  /* ── Intake (paper) ────────────────────────────────── */
+  .intake{
+    background:var(--paper);
+    color:var(--paper-text);
+    border-radius:2px;
+    padding:26px 24px 24px;
+    position:relative;
+    box-shadow:0 18px 40px -18px rgba(0,0,0,0.6);
+    background-image:
+      repeating-linear-gradient(transparent, transparent 27px, var(--paper-line) 28px);
+  }
+  .intake::before{
+    content:"";
+    position:absolute;
+    left:46px; top:0; bottom:0;
+    width:1px;
+    background:rgba(193,68,60,0.28);
+  }
+  .intake-head{
+    font-family:var(--serif);
+    font-size:19px;
+    font-weight:600;
+    margin:0 0 3px 0;
+    padding-left:34px;
+  }
+  .intake-sub{
+    font-size:12px;
+    color:var(--paper-muted);
+    margin:0 0 20px 0;
+    padding-left:34px;
+    line-height:1.5;
+  }
+  .field{margin-bottom:16px; padding-left:34px; padding-right:2px;}
+  .field label{
+    display:block;
+    font-size:11px;
+    text-transform:none;
+    color:var(--paper-muted);
+    margin-bottom:5px;
+    font-family:var(--mono);
+  }
+  .field .hint{
+    font-size:10.5px;
+    color:var(--paper-muted);
+    margin-top:4px;
+    line-height:1.4;
+  }
+  .field textarea, .field input[type=text], .field input[type=url]{
+    width:100%;
+    background:rgba(255,255,255,0.55);
+    border:1px solid var(--paper-line);
+    border-radius:2px;
+    padding:8px 9px;
+    font-family:var(--mono);
+    font-size:12.5px;
+    color:var(--paper-text);
+    resize:vertical;
+  }
+  .field textarea:focus, .field input:focus{
+    outline:2px solid var(--rust);
+    outline-offset:0;
+    background:#fff;
+  }
+  .file-drop{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    border:1px dashed var(--paper-line);
+    border-radius:2px;
+    padding:9px 10px;
+    background:rgba(255,255,255,0.35);
+    font-size:12px;
+  }
+  .file-drop button{
+    background:var(--paper-text);
+    color:var(--paper);
+    border:none;
+    font-family:var(--mono);
+    font-size:11px;
+    padding:6px 10px;
+    border-radius:2px;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .file-drop .fname{
+    color:var(--paper-muted);
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    flex:1;
+  }
+  .field input[type=file]{display:none;}
+  .clear-x{
+    background:none; border:none; color:var(--rust); cursor:pointer;
+    font-family:var(--mono); font-size:13px; padding:0 2px;
+  }
+
+  .intake-actions{
+    padding-left:34px;
+    display:flex;
+    gap:10px;
+    margin-top:22px;
+    flex-wrap:wrap;
+  }
+  .btn-run{
+    background:var(--rust);
+    color:#fff;
+    border:none;
+    font-family:var(--serif);
+    font-weight:600;
+    font-size:14px;
+    padding:11px 20px;
+    border-radius:2px;
+    cursor:pointer;
+    letter-spacing:0.2px;
+  }
+  .btn-run:hover{background:#A83B34;}
+  .btn-run:disabled{background:#B9AE94; cursor:not-allowed;}
+  .btn-ghost{
+    background:none;
+    border:1px solid var(--paper-line);
+    color:var(--paper-text);
+    font-family:var(--mono);
+    font-size:12px;
+    padding:10px 14px;
+    border-radius:2px;
+    cursor:pointer;
+  }
+  .btn-ghost:hover{border-color:var(--paper-text);}
+
+  /* ── Evidence board ────────────────────────────────── */
+  .board-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    margin-bottom:16px;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .board-title{
+    font-family:var(--serif);
+    font-size:19px;
+    color:var(--bone);
+    margin:0;
+  }
+  .board-status{
+    font-size:11.5px;
+    color:var(--ink-soft);
+  }
+
+  /* Verdict stamp */
+  .verdict{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:3px;
+    padding:22px 24px;
+    margin-bottom:22px;
+    display:grid;
+    grid-template-columns:auto 1fr;
+    gap:24px;
+    align-items:center;
+  }
+  @media (max-width:640px){ .verdict{grid-template-columns:1fr;} }
+  .verdict.empty{color:var(--ink-soft); font-size:13px; display:block;}
+  .stamp{
+    font-family:var(--serif);
+    font-weight:600;
+    font-size:15px;
+    letter-spacing:1.5px;
+    border:3px double currentColor;
+    border-radius:4px;
+    padding:12px 18px;
+    transform:rotate(-4deg);
+    display:inline-flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    min-width:150px;
+  }
+  .stamp .num{font-size:30px; letter-spacing:0; line-height:1; font-family:var(--mono);}
+  .stamp .lbl{margin-top:4px; font-size:12px;}
+  .stamp.trusted{color:var(--verdigris);}
+  .stamp.uncertain{color:var(--amber);}
+  .stamp.suspicious{color:var(--amber);}
+  .stamp.deceptive{color:var(--rust);}
+  .verdict-body h3{
+    font-family:var(--serif);
+    font-size:15px;
+    margin:0 0 8px 0;
+    color:var(--bone);
+  }
+  .verdict-body ul{margin:0; padding-left:18px; font-size:12.5px; color:var(--bone); line-height:1.65;}
+  .verdict-body ul.dim{color:var(--ink-soft); margin-top:8px;}
+  .verdict-body li::marker{color:var(--ink-soft);}
+
+  /* Agent cards */
+  .board-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(360px, 1fr));
+    gap:16px;
+  }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:3px;
+    padding:0;
+    overflow:hidden;
+  }
+  .card-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:13px 16px;
+    border-bottom:1px solid var(--panel-border-soft);
+    gap:10px;
+  }
+  .card-head .name{
+    font-family:var(--serif);
+    font-size:14.5px;
+    color:var(--bone);
+  }
+  .card-head .port{
+    font-size:10.5px;
+    color:var(--ink-soft);
+    display:block;
+    margin-top:1px;
+  }
+  .status-pill{
+    font-size:10px;
+    padding:3px 8px;
+    border-radius:20px;
+    border:1px solid var(--panel-border);
+    color:var(--ink-soft);
+    white-space:nowrap;
+  }
+  .status-pill.idle{color:var(--ink-soft);}
+  .status-pill.running{color:var(--amber); border-color:var(--amber-soft); background:var(--amber-soft);}
+  .status-pill.done{color:var(--verdigris); border-color:var(--verdigris-soft); background:var(--verdigris-soft);}
+  .status-pill.error{color:var(--rust); border-color:var(--rust-soft); background:var(--rust-soft);}
+  .status-pill.skipped{color:var(--ink-soft); font-style:italic;}
+
+  .card-body{padding:14px 16px 16px; font-size:12.5px;}
+  .card-body.dim{color:var(--ink-soft); font-style:italic;}
+  .card-body.err{color:var(--rust);}
+
+  .meter-row{margin-bottom:11px;}
+  .meter-row:last-child{margin-bottom:0;}
+  .meter-label{
+    display:flex;
+    justify-content:space-between;
+    font-size:11px;
+    color:var(--ink-soft);
+    margin-bottom:4px;
+  }
+  .meter-label .v{color:var(--bone); font-weight:600;}
+  .meter-track{
+    height:6px;
+    background:var(--wire);
+    border-radius:4px;
+    overflow:hidden;
+  }
+  .meter-fill{height:100%; border-radius:4px;}
+  .fill-good{background:var(--verdigris);}
+  .fill-mid{background:var(--amber);}
+  .fill-bad{background:var(--rust);}
+
+  .badge{
+    display:inline-block;
+    font-size:10.5px;
+    padding:2px 8px;
+    border-radius:20px;
+    border:1px solid var(--panel-border);
+    color:var(--bone);
+    margin-right:5px;
+  }
+  .kv{margin:10px 0 0; font-size:12px; color:var(--bone); line-height:1.6;}
+  .kv .k{color:var(--ink-soft);}
+  .claim-list{margin:10px 0 0; padding-left:16px;}
+  .claim-list li{margin-bottom:6px; color:var(--bone);}
+  .claim-list .ctype{color:var(--ink-soft); font-size:10.5px;}
+  .chip-row{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
+  .chip{
+    font-size:10.5px;
+    border:1px solid var(--panel-border);
+    border-radius:20px;
+    padding:4px 9px;
+    color:var(--bone);
+    display:flex;
+    align-items:center;
+    gap:5px;
+  }
+  .chip .dot{width:6px; height:6px; border-radius:50%;}
+  .flag-list{margin:10px 0 0; padding-left:16px; font-size:12px;}
+  .flag-list.red li{color:#E39A94;}
+  .flag-list.green li{color:#9CC7AF;}
+  .trigger{
+    border-left:2px solid var(--panel-border);
+    padding:5px 0 5px 10px;
+    margin-top:8px;
+    font-size:11.5px;
+  }
+  .trigger .phrase{color:var(--bone); font-style:italic;}
+  .trigger .dim2{color:var(--ink-soft); display:block; margin-top:2px;}
+  .foot-note{margin-top:12px; padding-top:10px; border-top:1px solid var(--panel-border-soft); font-size:11px; color:var(--ink-soft);}
+
+  footer{
+    text-align:center;
+    color:var(--ink-soft);
+    font-size:11px;
+    padding:20px 0 34px;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">Case File
+    <small>Multi-agent deception analysis — evidence intake &amp; review board</small>
+  </div>
+  <button class="conn-toggle" id="connToggle">Connection settings</button>
+</div>
+
+<div class="conn-panel" id="connPanel">
+  <div class="conn-panel-inner" id="connFields"></div>
+</div>
+
+<div class="layout">
+
+  <!-- ── INTAKE ───────────────────────────────────── -->
+  <div class="intake">
+    <p class="intake-head">Evidence intake</p>
+    <p class="intake-sub">Enter whatever you have. Only the agents relevant to what you provide will run.</p>
+
+    <div class="field">
+      <label>Claim / article text</label>
+      <textarea id="inText" rows="6" placeholder="Paste the text, headline, or message to examine…"></textarea>
+      <div class="hint">Feeds claim extraction and scam-pattern detection.</div>
+    </div>
+
+    <div class="field">
+      <label>Source URL <span style="color:var(--paper-muted)">(optional)</span></label>
+      <input type="url" id="inUrl" placeholder="https://example.com/article">
+      <div class="hint">If text is empty, this page is fetched for claim extraction. Also used for source credibility.</div>
+    </div>
+
+    <div class="field">
+      <label>Publisher / source name <span style="color:var(--paper-muted)">(optional)</span></label>
+      <input type="text" id="inSource" placeholder="e.g. Daily Ledger News">
+      <div class="hint">Used for source credibility if no URL is given.</div>
+    </div>
+
+    <div class="field">
+      <label>Image file <span style="color:var(--paper-muted)">(optional)</span></label>
+      <div class="file-drop">
+        <span class="fname" id="imgFileName">No file selected</span>
+        <button type="button" id="imgFileBtn">Choose file</button>
+        <input type="file" id="imgFile" accept="image/*">
+      </div>
+      <div class="hint">Checked by the image deepfake detector.</div>
+    </div>
+
+    <div class="field">
+      <label>Image URL <span style="color:var(--paper-muted)">(optional)</span></label>
+      <input type="url" id="inImgUrl" placeholder="https://example.com/photo.jpg">
+      <div class="hint">Used for cross-modal contradiction against the text above (requires a public URL, not a local file).</div>
+    </div>
+
+    <div class="field">
+      <label>Video file <span style="color:var(--paper-muted)">(optional)</span></label>
+      <div class="file-drop">
+        <span class="fname" id="vidFileName">No file selected</span>
+        <button type="button" id="vidFileBtn">Choose file</button>
+        <input type="file" id="vidFile" accept="video/mp4,video/webm,video/quicktime,video/mpeg">
+      </div>
+      <div class="hint">Checked by the deepfake evidence agent. Inline limit 20MB.</div>
+    </div>
+
+    <div class="intake-actions">
+      <button class="btn-run" id="runBtn">Run investigation</button>
+      <button class="btn-ghost" id="sampleBtn">Load sample case</button>
+      <button class="btn-ghost" id="resetBtn">Clear</button>
+    </div>
+  </div>
+
+  <!-- ── BOARD ────────────────────────────────────── -->
+  <div class="board">
+    <div class="board-head">
+      <h2 class="board-title">Evidence board</h2>
+      <span class="board-status" id="boardStatus">Awaiting evidence</span>
+    </div>
+
+    <div class="verdict empty" id="verdict">No verdict yet — submit evidence and run the investigation to populate the board below.</div>
+
+    <div class="board-grid" id="cardGrid"></div>
+  </div>
+
+</div>
+
+<footer>Local pipeline console · calls agents directly on their configured ports · nothing leaves this browser except those requests</footer>
+
+<script>
+// ─────────────────────────────────────────────────────────────────
+// Agent configuration
+// ─────────────────────────────────────────────────────────────────
+const AGENTS = {
+  claim:  { key:'claim',  name:'Claim Extraction',        port:8000, path:'/extract-claims',  icon:'01' },
+  cross:  { key:'cross',  name:'Cross-Modal Contradiction',port:8001, path:'/analyze',          icon:'02' },
+  video:  { key:'video',  name:'Deepfake Evidence (video)',port:8002, path:'/analyze-deepfake', icon:'03' },
+  image:  { key:'image',  name:'Image Deepfake Detector',  port:8003, path:'/analyze-image',    icon:'04' },
+  source: { key:'source', name:'Source Credibility',       port:8004, path:'/analyze-source',   icon:'05' },
+  scam:   { key:'scam',   name:'Scam Detection',           port:8005, path:'/analyze',          icon:'06' },
+  consensus: { key:'consensus', name:'Consensus Engine',   port:8006, path:'/consensus',        icon:'⚖' },
+};
+
+// Maps our internal card keys to the field names the Consensus Engine expects.
+const EVIDENCE_KEY = {
+  claim:'claim_extraction', cross:'cross_modal_contradiction', video:'deepfake_video',
+  image:'image_deepfake', source:'source_credibility', scam:'scam_detection',
+};
+
+const state = { host: 'http://localhost', results:{}, cardEls:{} };
+
+function agentUrl(agent){
+  return `${state.host.replace(/\/$/,'')}:${agent.port}${agent.path}`;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Connection settings panel
+// ─────────────────────────────────────────────────────────────────
+const connToggle = document.getElementById('connToggle');
+const connPanel  = document.getElementById('connPanel');
+const connFields = document.getElementById('connFields');
+
+connFields.innerHTML = `
+  <div class="conn-field">
+    <label>Host</label>
+    <input type="text" id="hostField" value="${state.host}">
+  </div>
+` + Object.values(AGENTS).map(a => `
+  <div class="conn-field">
+    <label>${a.name} port</label>
+    <input type="text" id="port-${a.key}" value="${a.port}">
+  </div>
+`).join('');
+
+connToggle.addEventListener('click', () => connPanel.classList.toggle('open'));
+document.getElementById('hostField').addEventListener('change', e => state.host = e.target.value.trim() || 'http://localhost');
+Object.values(AGENTS).forEach(a => {
+  document.getElementById(`port-${a.key}`).addEventListener('change', e => {
+    const v = parseInt(e.target.value, 10);
+    if (v) a.port = v;
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// File pickers
+// ─────────────────────────────────────────────────────────────────
+function wireFilePicker(btnId, inputId, nameId){
+  const btn = document.getElementById(btnId);
+  const input = document.getElementById(inputId);
+  const nameEl = document.getElementById(nameId);
+  btn.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => {
+    nameEl.textContent = input.files[0] ? input.files[0].name : 'No file selected';
+  });
+}
+wireFilePicker('imgFileBtn', 'imgFile', 'imgFileName');
+wireFilePicker('vidFileBtn', 'vidFile', 'vidFileName');
+
+document.getElementById('sampleBtn').addEventListener('click', () => {
+  document.getElementById('inText').value = "URGENT: Your account has been specially selected to receive a $1,000,000 government relief grant. This offer expires in 24 hours — act now and send a small processing fee to claim your reward before it's given to someone else.";
+  document.getElementById('inUrl').value = '';
+  document.getElementById('inSource').value = 'relief-grants-official.info';
+  document.getElementById('inImgUrl').value = '';
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  ['inText','inUrl','inSource','inImgUrl'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('imgFile').value = '';
+  document.getElementById('vidFile').value = '';
+  document.getElementById('imgFileName').textContent = 'No file selected';
+  document.getElementById('vidFileName').textContent = 'No file selected';
+  document.getElementById('cardGrid').innerHTML = '';
+  document.getElementById('boardStatus').textContent = 'Awaiting evidence';
+  const v = document.getElementById('verdict');
+  v.className = 'verdict empty';
+  v.textContent = 'No verdict yet — submit evidence and run the investigation to populate the board below.';
+  state.results = {};
+});
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+function fileToBase64(file){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result.split(',')[1]);
+    r.onerror = () => reject(new Error('Could not read file'));
+    r.readAsDataURL(file);
+  });
+}
+
+async function callAgent(agent, body, timeoutMs = 45000){
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  try{
+    const res = await fetch(agentUrl(agent), {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    let payload;
+    try{ payload = await res.json(); } catch(e){ payload = null; }
+    if(!res.ok){
+      const detail = (payload && payload.detail) ? payload.detail : `HTTP ${res.status}`;
+      throw new Error(detail);
+    }
+    return payload;
+  } catch(e){
+    if(e.name === 'AbortError') throw new Error('Timed out waiting for a response');
+    if(e instanceof TypeError) throw new Error(`Could not reach ${agentUrl(agent)} — is the service running?`);
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function clamp01(v){ v = parseFloat(v); if(isNaN(v)) return 0; return Math.min(1, Math.max(0, v)); }
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function meter(label, value, polarity){
+  // polarity: 'goodHigh' (green=high) or 'badHigh' (red=high)
+  const pct = Math.round(clamp01(value) * 100);
+  let cls;
+  if(polarity === 'goodHigh'){
+    cls = pct >= 66 ? 'fill-good' : pct >= 34 ? 'fill-mid' : 'fill-bad';
+  } else {
+    cls = pct >= 66 ? 'fill-bad' : pct >= 34 ? 'fill-mid' : 'fill-good';
+  }
+  return `
+    <div class="meter-row">
+      <div class="meter-label"><span>${escapeHtml(label)}</span><span class="v">${pct}%</span></div>
+      <div class="meter-track"><div class="meter-fill ${cls}" style="width:${pct}%"></div></div>
+    </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Card scaffolding
+// ─────────────────────────────────────────────────────────────────
+function buildCardShell(agent){
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="card-head">
+      <div>
+        <span class="name">${agent.icon} · ${agent.name}</span>
+        <span class="port">${agentUrl(agent)}</span>
+      </div>
+      <span class="status-pill idle" data-role="status">idle</span>
+    </div>
+    <div class="card-body dim" data-role="body">Not run.</div>
+  `;
+  return card;
+}
+
+function setCardStatus(agent, status, text){
+  const card = state.cardEls[agent.key];
+  const pill = card.querySelector('[data-role="status"]');
+  pill.className = `status-pill ${status}`;
+  pill.textContent = text || status;
+}
+
+function setCardBody(agent, html, cls){
+  const card = state.cardEls[agent.key];
+  const body = card.querySelector('[data-role="body"]');
+  body.className = `card-body${cls ? ' ' + cls : ''}`;
+  body.innerHTML = html;
+}
+
+function ensureCard(agent){
+  if(!state.cardEls[agent.key]){
+    const el = buildCardShell(agent);
+    state.cardEls[agent.key] = el;
+    document.getElementById('cardGrid').appendChild(el);
+  }
+  return state.cardEls[agent.key];
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Per-agent renderers
+// ─────────────────────────────────────────────────────────────────
+function renderClaim(data){
+  const claims = (data.claims || []).slice(0, 8);
+  const rest = (data.claims || []).length - claims.length;
+  const list = claims.map(c => `<li>${escapeHtml(c.text)} <span class="ctype">— ${escapeHtml(c.type)}, ${Math.round((c.confidence||0)*100)}% conf.</span></li>`).join('');
+  return `
+    <div class="kv"><span class="k">Claims found:</span> ${ (data.claims||[]).length }</div>
+    <ol class="claim-list">${list}</ol>
+    ${rest > 0 ? `<div class="foot-note">+ ${rest} more not shown</div>` : ''}
+  `;
+}
+
+function renderCross(data){
+  return `
+    ${meter('Semantic alignment', data.alignment_score, 'goodHigh')}
+    ${meter('Contradiction', data.contradiction_score, 'badHigh')}
+    <div class="kv"><span class="k">Verdict:</span> ${escapeHtml(data.verdict)}</div>
+    <div class="kv"><span class="k">Image shows:</span> ${escapeHtml(data.image_description)}</div>
+    <div class="kv"><span class="k">Text claims:</span> ${escapeHtml(data.text_summary)}</div>
+    ${data.mismatch_reason && data.mismatch_reason !== 'None' ? `<div class="kv"><span class="k">Mismatch:</span> ${escapeHtml(data.mismatch_reason)}</div>` : ''}
+  `;
+}
+
+function renderVideo(data){
+  const a = data.analysis || {};
+  const rows = ['lip_sync','audio_video_mismatch','temporal_artifacts','face_analysis']
+    .map(k => a[k] ? meter(a[k].label + ' — ' + k.replace(/_/g,' '), a[k].score, 'badHigh') : '')
+    .join('');
+  const findings = ['lip_sync','audio_video_mismatch','temporal_artifacts','face_analysis']
+    .filter(k => a[k] && a[k].findings)
+    .map(k => `<div class="kv"><span class="k">${k.replace(/_/g,' ')}:</span> ${escapeHtml(a[k].findings)}</div>`).join('');
+  return `
+    ${meter('Deepfake confidence', data.deepfake_confidence_score, 'badHigh')}
+    <div class="kv"><span class="k">Verdict:</span> ${escapeHtml(data.verdict)}</div>
+    ${rows}
+    ${findings}
+    <div class="foot-note">${escapeHtml(data.evidence_summary || '')}</div>
+  `;
+}
+
+function renderImage(data){
+  const f = data.features || {};
+  const rows = ['facial_geometry','frequency_artifacts','skin_texture','eye_reflection','edge_boundary']
+    .map(k => f[k] ? meter(f[k].label + ' — ' + k.replace(/_/g,' '), f[k].score, 'badHigh') : '')
+    .join('');
+  return `
+    ${meter('Fake confidence', data.fake_confidence_score, 'badHigh')}
+    <div class="kv"><span class="k">Verdict:</span> ${escapeHtml(data.verdict)}</div>
+    ${rows}
+    <div class="foot-note">${escapeHtml(data.summary || '')}</div>
+  `;
+}
+
+function renderSource(data){
+  const nodes = (data.nodes || []).map(n => {
+    const pct = Math.round(clamp01(n.trust_score)*100);
+    const dotColor = pct >= 66 ? 'var(--verdigris)' : pct >= 34 ? 'var(--amber)' : 'var(--rust)';
+    return `<span class="chip"><span class="dot" style="background:${dotColor}"></span>${escapeHtml(n.icon||'')} ${escapeHtml(n.label)} · ${pct}%</span>`;
+  }).join('');
+  const redFlags = (data.red_flags||[]).map(r => `<li>${escapeHtml(r)}</li>`).join('');
+  const positives = (data.positive_signals||[]).map(r => `<li>${escapeHtml(r)}</li>`).join('');
+  return `
+    <div class="kv"><span class="k">Source:</span> ${escapeHtml(data.source)}</div>
+    ${meter('Overall trust (' + escapeHtml(data.trust_label) + ')', (data.trust_score||0)/100, 'goodHigh')}
+    <div class="chip-row">${nodes}</div>
+    ${redFlags ? `<div class="foot-note">Red flags</div><ul class="flag-list red">${redFlags}</ul>` : ''}
+    ${positives ? `<div class="foot-note">Positive signals</div><ul class="flag-list green">${positives}</ul>` : ''}
+    <div class="foot-note">${escapeHtml(data.summary || '')}</div>
+  `;
+}
+
+function renderScam(data){
+  const bv = data.behavioral_vector || {};
+  const triggers = (data.trigger_phrases||[]).slice(0,6).map(t => `
+    <div class="trigger">
+      <span class="phrase">"${escapeHtml(t.phrase)}"</span>
+      <span class="dim2">${escapeHtml(t.dimension)} · ${Math.round((t.score||0)*100)}% · ${escapeHtml(t.explanation)}</span>
+    </div>`).join('');
+  return `
+    <div class="kv"><span class="k">Pattern:</span> ${escapeHtml(data.pattern_type)} <span class="badge">${escapeHtml(data.risk_tier)}</span></div>
+    ${meter('Scam probability', data.scam_probability, 'badHigh')}
+    ${meter('Urgency', bv.urgency, 'badHigh')}
+    ${meter('Psychological manipulation', bv.psychological_manipulation, 'badHigh')}
+    ${meter('Financial lure', bv.financial_lure, 'badHigh')}
+    ${meter('Emotional exploitation', bv.emotional_exploitation, 'badHigh')}
+    ${triggers}
+    <div class="foot-note">${escapeHtml(data.recommendation || '')}</div>
+  `;
+}
+
+const RENDERERS = { claim:renderClaim, cross:renderCross, video:renderVideo, image:renderImage, source:renderSource, scam:renderScam };
+
+// ─────────────────────────────────────────────────────────────────
+// Task orchestration
+// ─────────────────────────────────────────────────────────────────
+async function runTask(agent, bodyFn){
+  ensureCard(agent);
+  setCardStatus(agent, 'running', 'running…');
+  setCardBody(agent, 'Contacting agent…', 'dim');
+  try{
+    const body = await bodyFn();
+    const data = await callAgent(agent, body);
+    state.results[agent.key] = data;
+    setCardStatus(agent, 'done', 'done');
+    setCardBody(agent, RENDERERS[agent.key](data));
+    return data;
+  } catch(e){
+    setCardStatus(agent, 'error', 'error');
+    setCardBody(agent, escapeHtml(e.message), 'err');
+    return null;
+  }
+}
+
+function markSkipped(agent, reason){
+  ensureCard(agent);
+  setCardStatus(agent, 'skipped', 'skipped');
+  setCardBody(agent, escapeHtml(reason), 'dim');
+}
+
+document.getElementById('runBtn').addEventListener('click', runInvestigation);
+
+async function runInvestigation(){
+  const runBtn = document.getElementById('runBtn');
+  runBtn.disabled = true;
+  runBtn.textContent = 'Investigating…';
+  document.getElementById('boardStatus').textContent = 'In progress…';
+  document.getElementById('cardGrid').innerHTML = '';
+  state.cardEls = {};
+  state.results = {};
+  const verdictEl = document.getElementById('verdict');
+  verdictEl.className = 'verdict empty';
+  verdictEl.textContent = 'Running agents…';
+
+  const text     = document.getElementById('inText').value.trim();
+  const urlVal   = document.getElementById('inUrl').value.trim();
+  const source   = document.getElementById('inSource').value.trim();
+  const imgUrl   = document.getElementById('inImgUrl').value.trim();
+  const imgFile  = document.getElementById('imgFile').files[0];
+  const vidFile  = document.getElementById('vidFile').files[0];
+
+  const jobs = [];
+
+  // Claim extraction: needs text or url
+  if(text || urlVal){
+    jobs.push(runTask(AGENTS.claim, async () => text ? { text } : { url: urlVal }));
+  } else {
+    markSkipped(AGENTS.claim, 'No text or URL provided.');
+  }
+
+  // Scam detection: needs text
+  if(text){
+    jobs.push(runTask(AGENTS.scam, async () => ({ text })));
+  } else {
+    markSkipped(AGENTS.scam, 'No text provided.');
+  }
+
+  // Source credibility: needs url or source name
+  if(urlVal || source){
+    jobs.push(runTask(AGENTS.source, async () => ({ source_name: source || undefined, url: urlVal || undefined })));
+  } else {
+    markSkipped(AGENTS.source, 'No source URL or publisher name provided.');
+  }
+
+  // Image deepfake: needs uploaded file
+  if(imgFile){
+    jobs.push(runTask(AGENTS.image, async () => {
+      const b64 = await fileToBase64(imgFile);
+      return { image_base64: b64, mime_type: imgFile.type || 'image/jpeg' };
+    }));
+  } else {
+    markSkipped(AGENTS.image, 'No image file uploaded.');
+  }
+
+  // Cross-modal contradiction: needs image URL + text
+  if(imgUrl && text){
+    jobs.push(runTask(AGENTS.cross, async () => ({ image_url: imgUrl, text })));
+  } else {
+    markSkipped(AGENTS.cross, !imgUrl ? 'No image URL provided.' : 'No text to compare the image against.');
+  }
+
+  // Video deepfake: needs uploaded file
+  if(vidFile){
+    jobs.push(runTask(AGENTS.video, async () => {
+      const b64 = await fileToBase64(vidFile);
+      return { video_base64: b64, mime_type: vidFile.type || 'video/mp4' };
+    }));
+  } else {
+    markSkipped(AGENTS.video, 'No video file uploaded.');
+  }
+
+  await Promise.allSettled(jobs);
+
+  await computeVerdict();
+  document.getElementById('boardStatus').textContent = 'Investigation complete';
+  runBtn.disabled = false;
+  runBtn.textContent = 'Run investigation';
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Verdict aggregation — delegated to the Consensus Engine (Agent 6),
+// with a transparent local fallback if that agent is unreachable.
+// ─────────────────────────────────────────────────────────────────
+function verdictCls(label){
+  const l = (label || '').toUpperCase();
+  if(l === 'TRUSTED') return 'trusted';
+  if(l === 'SUSPICIOUS') return 'suspicious';
+  if(l === 'DECEPTIVE') return 'deceptive';
+  return 'uncertain'; // UNCERTAIN, INSUFFICIENT_EVIDENCE, anything else
+}
+
+function renderConsensusVerdict(data){
+  const cls = verdictCls(data.verdict);
+  const pct = Math.round(data.trust_score);
+  const factors = (data.contributing_factors || []).map(f => {
+    const arrow = f.direction === 'supports_trust' ? '▲' : f.direction === 'undermines_trust' ? '▼' : '·';
+    const color = f.direction === 'supports_trust' ? 'var(--verdigris)' : f.direction === 'undermines_trust' ? 'var(--rust)' : 'var(--ink-soft)';
+    const agentName = (AGENTS[Object.keys(EVIDENCE_KEY).find(k => EVIDENCE_KEY[k] === f.agent)] || {}).name || f.agent;
+    return `<li><span style="color:${color}">${arrow}</span> <strong>${escapeHtml(agentName)}</strong> — ${escapeHtml(f.reason)}</li>`;
+  }).join('');
+  const conflicts = (data.conflicts || []).map(c => `<li>${escapeHtml(c)}</li>`).join('');
+
+  document.getElementById('verdict').className = 'verdict';
+  document.getElementById('verdict').innerHTML = `
+    <div class="stamp ${cls}">
+      <span class="num">${pct}</span>
+      <span class="lbl">${escapeHtml((data.verdict||'').replace(/_/g,' '))}</span>
+    </div>
+    <div class="verdict-body">
+      <h3>Consensus verdict — ${pct}/100 <span style="color:var(--ink-soft); font-family:var(--mono); font-size:11px; font-weight:400;">· confidence ${Math.round((data.confidence||0)*100)}%</span></h3>
+      <p style="margin:0 0 10px; font-size:12.5px; color:var(--bone); line-height:1.6;">${escapeHtml(data.explanation)}</p>
+      ${factors ? `<ul>${factors}</ul>` : ''}
+      ${conflicts ? `<div class="foot-note" style="border-top:none; padding-top:0; margin-top:10px; color:var(--amber);">Conflicts detected</div><ul class="flag-list red">${conflicts}</ul>` : ''}
+      ${data.recommendation ? `<div class="foot-note">${escapeHtml(data.recommendation)}</div>` : ''}
+    </div>
+  `;
+}
+
+function renderLocalFallbackVerdict(signals, notes, unavailable, engineNote){
+  const verdictEl = document.getElementById('verdict');
+
+  if(signals.length === 0){
+    verdictEl.className = 'verdict empty';
+    verdictEl.textContent = 'No scoring signals were collected — provide at least text, a source, or media to score, or check that the relevant agents are running.';
+    return;
+  }
+
+  const totalWeight = signals.reduce((s,x) => s + x.weight, 0);
+  const weighted = signals.reduce((s,x) => s + x.weight * x.score, 0) / totalWeight;
+  const pct = Math.round(weighted * 100);
+
+  let cls, label;
+  if(pct >= 75){ cls='trusted'; label='TRUSTED'; }
+  else if(pct >= 50){ cls='uncertain'; label='UNCERTAIN'; }
+  else if(pct >= 25){ cls='suspicious'; label='SUSPICIOUS'; }
+  else { cls='deceptive'; label='DECEPTIVE'; }
+
+  verdictEl.className = 'verdict';
+  verdictEl.innerHTML = `
+    <div class="stamp ${cls}">
+      <span class="num">${pct}</span>
+      <span class="lbl">${label}</span>
+    </div>
+    <div class="verdict-body">
+      <h3>Composite trust score — ${pct}/100</h3>
+      <ul>${notes.map(n => `<li>${n}</li>`).join('')}</ul>
+      ${unavailable.length ? `<ul class="dim">${unavailable.map(n => `<li>${n} did not respond — excluded from scoring.</li>`).join('')}</ul>` : ''}
+      <div class="foot-note" style="color:var(--amber);">${escapeHtml(engineNote)}</div>
+    </div>
+  `;
+}
+
+async function computeVerdict(){
+  const r = state.results;
+  const signals = [];
+  const notes = [];
+  const unavailable = [];
+
+  Object.values(AGENTS).forEach(a => {
+    if(a.key === 'consensus') return;
+    const card = state.cardEls[a.key];
+    if(card){
+      const pill = card.querySelector('[data-role="status"]');
+      if(pill && pill.classList.contains('error')) unavailable.push(a.name);
+    }
+  });
+
+  if(r.scam){
+    signals.push({ weight:1, score: 1 - clamp01(r.scam.scam_probability) });
+    notes.push(`Scam Detection: ${escapeHtml(r.scam.pattern_type)} pattern, ${r.scam.risk_tier} risk.`);
+  }
+  if(r.source){
+    signals.push({ weight:1, score: clamp01((r.source.trust_score||0)/100) });
+    notes.push(`Source Credibility: ${escapeHtml(r.source.trust_label)}.`);
+  }
+  if(r.image){
+    signals.push({ weight:1, score: 1 - clamp01(r.image.fake_confidence_score) });
+    notes.push(`Image Deepfake Detector: ${escapeHtml(r.image.verdict)}.`);
+  }
+  if(r.video){
+    signals.push({ weight:1, score: 1 - clamp01(r.video.deepfake_confidence_score) });
+    notes.push(`Deepfake Evidence (video): ${escapeHtml(r.video.verdict)}.`);
+  }
+  if(r.cross){
+    signals.push({ weight:0.75, score: clamp01(1 - r.cross.contradiction_score) * 0.6 + clamp01(r.cross.alignment_score) * 0.4 });
+    notes.push(`Cross-Modal Contradiction: ${escapeHtml(r.cross.verdict)}.`);
+  }
+  if(r.claim){
+    notes.push(`Claim Extraction: ${ (r.claim.claims||[]).length } atomic claims isolated for review.`);
+  }
+
+  // Nothing at all was collected — no point calling the consensus engine.
+  if(signals.length === 0 && !r.claim){
+    renderLocalFallbackVerdict(signals, notes, unavailable, '');
+    return;
+  }
+
+  document.getElementById('verdict').className = 'verdict empty';
+  document.getElementById('verdict').textContent = 'Consulting the Consensus Engine…';
+
+  const evidence = {};
+  Object.entries(EVIDENCE_KEY).forEach(([cardKey, evidenceKey]) => {
+    evidence[evidenceKey] = r[cardKey] ?? null;
+  });
+
+  try{
+    const data = await callAgent(AGENTS.consensus, { evidence, unavailable });
+    renderConsensusVerdict(data);
+  } catch(e){
+    renderLocalFallbackVerdict(
+      signals, notes, unavailable,
+      `Consensus Engine (port ${AGENTS.consensus.port}) unreachable — showing a local weighted-average estimate instead: ${e.message}`
+    );
+  }
+}
+</script>
+</body>
+</html>
