@@ -25,7 +25,7 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-const PORT    = 8005;
+const PORT    = 8007;
 const API_KEY = process.env.GEMINI_API_KEY || '';
 // Search grounding requires a model that supports the "google_search" tool
 // (Gemini 2.0+ models) AND a Google Cloud project with billing linked — on a
